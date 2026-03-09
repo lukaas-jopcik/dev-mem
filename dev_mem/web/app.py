@@ -9,6 +9,8 @@ from __future__ import annotations
 import csv
 import io
 import json
+import time
+from collections import Counter
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
@@ -21,6 +23,7 @@ from flask import (
     make_response,
     redirect,
     url_for,
+    Response,
 )
 from markupsafe import Markup
 
@@ -80,18 +83,59 @@ def _all_projects() -> list[dict]:
 
 
 def _project_health(project_id: int) -> int:
-    """Return 0-100 health score for a project based on recent activity."""
-    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
-    commits = _db._conn.execute(
-        "SELECT COUNT(*) AS n FROM git_events WHERE project_id=? AND ts>=?",
+    """Return 0-100 health score based on recent observation activity."""
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    recent_obs = _db._conn.execute(
+        "SELECT COUNT(*) AS n FROM observations WHERE project_id=? AND created_at>=?",
         (project_id, week_ago),
     ).fetchone()["n"]
     errors = _db._conn.execute(
-        "SELECT COALESCE(SUM(count),0) AS n FROM errors WHERE project_id=? AND last_seen>=?",
-        (project_id, week_ago),
+        "SELECT COALESCE(SUM(count),0) AS n FROM errors WHERE project_id=?",
+        (project_id,),
     ).fetchone()["n"]
-    score = min(100, commits * 10) - min(50, errors * 5)
-    return max(0, score)
+    activity = min(70, recent_obs * 4)
+    penalty = min(30, int(errors) * 3)
+    return max(0, activity - penalty)
+
+
+def _project_obs_stats(project_id: int) -> dict:
+    """Return rich observation stats for a project card."""
+    type_rows = _db._conn.execute(
+        "SELECT type, COUNT(*) AS n FROM observations WHERE project_id=? GROUP BY type",
+        (project_id,),
+    ).fetchall()
+    types = {r["type"] or "discovery": r["n"] for r in type_rows}
+    total = sum(types.values())
+
+    bounds = _db._conn.execute(
+        "SELECT MIN(created_at) AS first, MAX(created_at) AS last FROM observations WHERE project_id=?",
+        (project_id,),
+    ).fetchone()
+    active_days = _db._conn.execute(
+        "SELECT COUNT(DISTINCT DATE(created_at)) AS n FROM observations WHERE project_id=?",
+        (project_id,),
+    ).fetchone()["n"]
+
+    concept_rows = _db._conn.execute(
+        "SELECT concepts FROM observations WHERE project_id=? AND concepts != '[]' LIMIT 500",
+        (project_id,),
+    ).fetchall()
+    all_concepts: list[str] = []
+    for row in concept_rows:
+        try:
+            all_concepts.extend(json.loads(row["concepts"]))
+        except Exception:
+            pass
+    top_concepts = [c for c, _ in Counter(all_concepts).most_common(6) if c and len(c) < 30]
+
+    return {
+        "total": total,
+        "types": types,
+        "last_activity": (bounds["last"] or "")[:10],
+        "first_activity": (bounds["first"] or "")[:10],
+        "active_days": active_days,
+        "top_concepts": top_concepts,
+    }
 
 
 def _active_alerts() -> list[dict]:
@@ -152,6 +196,18 @@ def index():
     ).fetchone()
     avg_score = round(avg_score_row["avg"] or 0)
 
+    recent_obs = _db._conn.execute(
+        "SELECT id, type, title, project, created_at FROM observations ORDER BY id DESC LIMIT 8"
+    ).fetchall()
+    obs_today = _db._conn.execute(
+        "SELECT COUNT(*) AS n FROM observations WHERE created_at LIKE ?", (f"{today}%",)
+    ).fetchone()["n"]
+    active_projects_today = _db._conn.execute(
+        "SELECT COUNT(DISTINCT project_id) AS n FROM observations "
+        "WHERE created_at LIKE ? AND project_id IS NOT NULL", (f"{today}%",)
+    ).fetchone()["n"]
+    total_obs = _db._conn.execute("SELECT COUNT(*) AS n FROM observations").fetchone()["n"]
+
     alerts = _active_alerts()
     projects = _all_projects()
 
@@ -164,34 +220,44 @@ def index():
         alerts=alerts,
         projects=projects,
         today=today,
+        recent_obs=[dict(o) for o in recent_obs],
+        obs_today=obs_today,
+        active_projects_today=active_projects_today,
+        total_obs=total_obs,
     )
 
 
 @app.route("/projects")
 def projects():
     rows = _db._conn.execute(
-        "SELECT * FROM projects WHERE active=1 ORDER BY name"
+        "SELECT * FROM projects WHERE active=1 ORDER BY last_accessed DESC, name"
     ).fetchall()
-    cards = []
+    git_cards = []
+    local_cards = []
     for r in rows:
         pid = r["id"]
+        r_dict = dict(r)
+        obs = _project_obs_stats(pid)
         commit_count = _db._conn.execute(
             "SELECT COUNT(*) AS n FROM git_events WHERE project_id=?", (pid,)
         ).fetchone()["n"]
-        total_sec = _db._conn.execute(
-            "SELECT COALESCE(SUM(duration_sec),0) AS s FROM sessions WHERE project_id=?", (pid,)
-        ).fetchone()["s"]
-        last_act = _db._conn.execute(
-            "SELECT MAX(ts) AS t FROM commands WHERE project_id=?", (pid,)
-        ).fetchone()["t"]
-        cards.append({
-            **dict(r),
+        card = {
+            **r_dict,
             "commit_count": commit_count,
-            "total_hours": round(total_sec / 3600, 1),
-            "last_activity": (last_act or "")[:10],
+            "last_activity": obs["last_activity"] or (r_dict.get("last_accessed") or "")[:10],
+            "first_activity": obs["first_activity"],
             "health": _project_health(pid),
-        })
-    return render_template("projects.html", cards=cards)
+            "is_git": r_dict.get("is_git", 0),
+            "obs_total": obs["total"],
+            "obs_types": obs["types"],
+            "active_days": obs["active_days"],
+            "top_concepts": obs["top_concepts"],
+        }
+        if card["is_git"]:
+            git_cards.append(card)
+        else:
+            local_cards.append(card)
+    return render_template("projects.html", git_cards=git_cards, local_cards=local_cards)
 
 
 @app.route("/project/<name>")
@@ -211,6 +277,17 @@ def project_detail(name: str):
     learnings_rows = _db._conn.execute(
         "SELECT * FROM learnings WHERE project_id=? ORDER BY ts DESC LIMIT 10", (pid,)
     ).fetchall()
+    recent_obs = _db._conn.execute(
+        "SELECT id, type, title, narrative, created_at FROM observations "
+        "WHERE project_id=? ORDER BY id DESC LIMIT 15",
+        (pid,),
+    ).fetchall()
+    session_sums = _db._conn.execute(
+        "SELECT request, completed, files_read, files_edited, created_at "
+        "FROM session_summaries WHERE project_id=? ORDER BY created_at DESC LIMIT 10",
+        (pid,),
+    ).fetchall()
+    obs_stats = _project_obs_stats(pid)
     stats = _db.get_today_stats(pid)
     return render_template(
         "project_detail.html",
@@ -218,6 +295,9 @@ def project_detail(name: str):
         commits=[dict(c) for c in commits],
         errors=[dict(e) for e in errors],
         learnings=[dict(l) for l in learnings_rows],
+        recent_obs=[dict(o) for o in recent_obs],
+        session_sums=[dict(s) for s in session_sums],
+        obs_stats=obs_stats,
         stats=stats,
         health=_project_health(pid),
     )
@@ -313,7 +393,34 @@ def daily(date: str):
         "WHERE ds.date=? ORDER BY p.name",
         (date,),
     ).fetchall()
-    return render_template("daily.html", date=date, summaries=[dict(r) for r in rows])
+    # Fallback: show observations from that day grouped by project
+    obs_by_project: list[dict] = []
+    if not rows:
+        obs_rows = _db._conn.execute(
+            "SELECT o.type, o.title, o.narrative, p.name AS project_name "
+            "FROM observations o LEFT JOIN projects p ON o.project_id=p.id "
+            "WHERE o.created_at LIKE ? ORDER BY p.name, o.id DESC",
+            (f"{date}%",),
+        ).fetchall()
+        by_proj: dict[str, list] = {}
+        for o in obs_rows:
+            pname = o["project_name"] or "General"
+            by_proj.setdefault(pname, []).append(dict(o))
+        obs_by_project = [{"project": k, "obs": v} for k, v in by_proj.items()]
+    try:
+        dt = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        prev_date = (dt - timedelta(days=1)).strftime("%Y-%m-%d")
+        next_date = (dt + timedelta(days=1)).strftime("%Y-%m-%d")
+    except ValueError:
+        prev_date = next_date = date
+    return render_template(
+        "daily.html",
+        date=date,
+        summaries=[dict(r) for r in rows],
+        obs_by_project=obs_by_project,
+        prev_date=prev_date,
+        next_date=next_date,
+    )
 
 
 @app.route("/daily")
@@ -427,8 +534,224 @@ def api_stats():
     })
 
 
+@app.route("/memory")
+def memory():
+    project_filter = request.args.get("project", "")
+    type_filter = request.args.get("type", "")
+    search_query = request.args.get("q", "")
+    limit = int(request.args.get("limit", 50))
+
+    try:
+        import sqlite3 as _sqlite3
+        from dev_mem.memory.observations import search_observations, list_observations
+
+        conn = _sqlite3.connect(str(DB_PATH))
+        conn.row_factory = _sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+
+        try:
+            if search_query:
+                observations = search_observations(
+                    conn, search_query,
+                    limit=limit,
+                    project=project_filter or None,
+                    obs_type=type_filter or None,
+                )
+            else:
+                observations = list_observations(
+                    conn,
+                    limit=limit,
+                    project=project_filter or None,
+                    obs_type=type_filter or None,
+                )
+
+            obs_types = [r[0] for r in conn.execute(
+                "SELECT DISTINCT type FROM observations WHERE type != '' ORDER BY type"
+            ).fetchall()]
+
+            total = conn.execute("SELECT COUNT(*) AS n FROM observations").fetchone()["n"]
+        except Exception:  # noqa: BLE001
+            observations = []
+            obs_types = []
+            total = 0
+        finally:
+            conn.close()
+    except ImportError:
+        observations = []
+        obs_types = []
+        total = 0
+
+    all_projects = _all_projects()
+    return render_template(
+        "memory.html",
+        observations=observations,
+        obs_types=obs_types,
+        total=total,
+        project_filter=project_filter,
+        type_filter=type_filter,
+        search_query=search_query,
+        projects=all_projects,
+    )
+
+
+@app.route("/api/live")
+def api_live():
+    """Server-Sent Events endpoint — pushes live stats every 3 seconds."""
+    def _stream():
+        import sqlite3 as _sqlite3
+        while True:
+            try:
+                # Open a fresh connection per tick to always get latest data
+                conn = _sqlite3.connect(str(DB_PATH))
+                conn.row_factory = _sqlite3.Row
+                today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+                def _count(table: str, ts_col: str = "ts") -> int:
+                    row = conn.execute(
+                        f"SELECT COUNT(*) AS n FROM {table} WHERE {ts_col} LIKE ?",
+                        (f"{today}%",),
+                    ).fetchone()
+                    return row["n"] if row else 0
+
+                counts = {
+                    "commands":        _count("commands"),
+                    "git_events":      _count("git_events"),
+                    "claude_sessions": _count("claude_sessions"),
+                    "errors":          _count("errors", "last_seen"),
+                }
+                recent_cmd = conn.execute(
+                    "SELECT cmd, ts FROM commands ORDER BY ts DESC LIMIT 5"
+                ).fetchall()
+                recent_commits = conn.execute(
+                    "SELECT message, ts FROM git_events ORDER BY ts DESC LIMIT 5"
+                ).fetchall()
+                obs_total = conn.execute(
+                    "SELECT COUNT(*) AS n FROM observations"
+                ).fetchone()["n"]
+                recent_obs = conn.execute(
+                    "SELECT id, type, title, narrative, project, created_at "
+                    "FROM observations ORDER BY id DESC LIMIT 10"
+                ).fetchall()
+
+                conn.close()
+
+                data = json.dumps({
+                    **counts,
+                    "observations": obs_total,
+                    "recent_commands": [
+                        {"cmd": r["cmd"], "ts": r["ts"]} for r in recent_cmd
+                    ],
+                    "recent_commits": [
+                        {"message": r["message"][:80], "ts": r["ts"]} for r in recent_commits
+                    ],
+                    "recent_observations": [
+                        {
+                            "id": r["id"],
+                            "type": r["type"] or "discovery",
+                            "title": r["title"] or "",
+                            "narrative": (r["narrative"] or "")[:200],
+                            "project": r["project"] or "",
+                            "created_at": (r["created_at"] or "")[:16],
+                        }
+                        for r in recent_obs
+                    ],
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                })
+                yield f"data: {data}\n\n"
+            except Exception:  # noqa: BLE001
+                yield "data: {}\n\n"
+            time.sleep(3)
+
+    return Response(
+        _stream(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.route("/team")
+def team():
+    cc_sessions = _db._conn.execute(
+        "SELECT ccs.*, p.name AS project_name FROM claude_code_sessions ccs "
+        "LEFT JOIN projects p ON p.id=ccs.project_id "
+        "ORDER BY ccs.started_at DESC LIMIT 20"
+    ).fetchall()
+    ss = _db._conn.execute(
+        "SELECT s.*, p.name AS project_name FROM session_summaries s "
+        "LEFT JOIN projects p ON p.id=s.project_id "
+        "ORDER BY s.created_at DESC LIMIT 30"
+    ).fetchall()
+    tool_stats = _db._conn.execute(
+        "SELECT tool, COUNT(*) AS n FROM claude_sessions GROUP BY tool ORDER BY n DESC LIMIT 12"
+    ).fetchall()
+    today = _today()
+    today_obs = _db._conn.execute(
+        "SELECT COUNT(*) AS n FROM observations WHERE created_at LIKE ?", (f"{today}%",)
+    ).fetchone()["n"]
+    today_projects = [
+        r[0] for r in _db._conn.execute(
+            "SELECT DISTINCT p.name FROM observations o "
+            "JOIN projects p ON o.project_id=p.id WHERE o.created_at LIKE ?",
+            (f"{today}%",),
+        ).fetchall()
+    ]
+    week_obs = _db._conn.execute(
+        "SELECT COUNT(*) AS n FROM observations WHERE created_at >= ?",
+        ((datetime.now(timezone.utc) - timedelta(days=7)).isoformat(),),
+    ).fetchone()["n"]
+    return render_template(
+        "team.html",
+        cc_sessions=[dict(s) for s in cc_sessions],
+        session_summaries=[dict(s) for s in ss],
+        tool_stats=[dict(t) for t in tool_stats],
+        today_obs=today_obs,
+        week_obs=week_obs,
+        today_projects=today_projects,
+        today=today,
+    )
+
+
+@app.route("/api/obs-stats")
+def api_obs_stats():
+    days = int(request.args.get("days", 30))
+    start_dt = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    project_counts = _db._conn.execute(
+        "SELECT p.name, COUNT(o.id) AS n FROM observations o "
+        "JOIN projects p ON o.project_id=p.id "
+        "WHERE o.created_at >= ? GROUP BY p.id ORDER BY n DESC LIMIT 12",
+        (start_dt,),
+    ).fetchall()
+    daily_obs = _db._conn.execute(
+        "SELECT DATE(created_at) AS d, COUNT(*) AS n FROM observations "
+        "WHERE created_at >= ? GROUP BY DATE(created_at) ORDER BY d",
+        (start_dt,),
+    ).fetchall()
+    type_breakdown = _db._conn.execute(
+        "SELECT type, COUNT(*) AS n FROM observations "
+        "WHERE created_at >= ? GROUP BY type ORDER BY n DESC",
+        (start_dt,),
+    ).fetchall()
+    hourly = _db._conn.execute(
+        "SELECT CAST(strftime('%H', created_at) AS INTEGER) AS hour, "
+        "CAST(strftime('%w', created_at) AS INTEGER) AS dow, COUNT(*) AS n "
+        "FROM observations WHERE created_at >= ? GROUP BY hour, dow",
+        (start_dt,),
+    ).fetchall()
+
+    return jsonify({
+        "project_counts": [{"project": r["name"], "count": r["n"]} for r in project_counts],
+        "daily_obs": [{"date": r["d"], "count": r["n"]} for r in daily_obs],
+        "type_breakdown": [{"type": r["type"] or "discovery", "count": r["n"]} for r in type_breakdown],
+        "heatmap": [{"hour": r["hour"], "dow": r["dow"], "count": r["n"]} for r in hourly],
+    })
+
+
 def run():
-    app.run(host="127.0.0.1", port=8888, debug=False)
+    app.run(host="127.0.0.1", port=8888, debug=False, threaded=True)
 
 
 if __name__ == "__main__":

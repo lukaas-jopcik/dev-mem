@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Memory — dev-mem{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb">
+  <h1 class="text-sm font-semibold text-slate-200">Memory</h1>
+  <span class="breadcrumb-sep">/</span>
+  <span class="text-slate-400 text-sm">{{ total | int }} observations</span>
+</nav>
+{% endblock %}
+
+{% block topbar_extra %}
+<form method="get" class="flex items-center gap-2">
+  <input name="q" value="{{ search_query }}" placeholder="Search observations…"
+         class="input-sm bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 w-48" />
+  <select name="type" class="input-sm bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200">
+    <option value="">All types</option>
+    {% for t in obs_types %}
+    <option value="{{ t }}" {% if t == type_filter %}selected{% endif %}>{{ t }}</option>
+    {% endfor %}
+  </select>
+  <select name="project" class="input-sm bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200">
+    <option value="">All projects</option>
+    {% for p in projects %}
+    <option value="{{ p.name }}" {% if p.name == project_filter %}selected{% endif %}>{{ p.name }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-3 py-1 rounded">Search</button>
+</form>
+{% endblock %}
+
+{% block content %}
+{% if not observations %}
+<div class="text-center text-slate-400 py-20">
+  <p class="text-lg">No observations yet.</p>
+  <p class="mt-2 text-sm">Observations are automatically captured during Claude Code sessions, or you can add them manually:</p>
+  <code class="block mt-3 bg-slate-800 rounded px-4 py-2 text-indigo-300 text-sm inline-block">dev-mem memory save "Your insight here"</code>
+</div>
+{% else %}
+<div id="obs-list" class="space-y-3">
+  {% for obs in observations %}
+  <div class="card hover:border-slate-600 transition-colors cursor-default">
+    <div class="flex items-start gap-3">
+      <span class="obs-badge obs-{{ obs.type or 'discovery' }} mt-0.5 flex-shrink-0">{{ obs.type or 'disc' }}</span>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-1">
+          {% if obs.project %}
+          <span class="text-xs text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">{{ obs.project }}</span>
+          {% endif %}
+          <span class="text-xs text-slate-600">{{ (obs.created_at or '')[:16] }}</span>
+        </div>
+        <p class="text-sm text-slate-200 leading-snug truncate">{{ obs.title }}</p>
+        {% if obs.narrative and not obs.narrative.startswith('{') %}
+        <p class="text-xs text-slate-400 mt-1 line-clamp-2">{{ obs.narrative[:200] }}</p>
+        {% endif %}
+        {% if obs.files_modified and obs.files_modified | length > 0 %}
+        <div class="mt-1.5 flex flex-wrap gap-1">
+          {% for f in obs.files_modified[:3] %}
+          <span class="text-xs bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono truncate max-w-xs">{{ f.split('/')[-1] }}</span>
+          {% endfor %}
+          {% if obs.files_modified | length > 3 %}
+          <span class="text-xs text-slate-600">+{{ obs.files_modified | length - 3 }}</span>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+      <span class="text-xs text-slate-700 flex-shrink-0 tabular-nums">#{{ obs.id }}</span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

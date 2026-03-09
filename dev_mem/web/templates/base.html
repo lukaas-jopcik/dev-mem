@@ -10,86 +10,244 @@
   <script>
     tailwind.config = {
       darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            accent: '#6366f1',
-          }
-        }
-      }
+      theme: { extend: { colors: { accent: '#6366f1' } } }
     }
   </script>
 </head>
 <body class="dark h-full bg-slate-900 text-slate-100 flex">
 
   <!-- Sidebar -->
-  <aside class="sidebar w-56 flex-shrink-0 flex flex-col bg-slate-950 border-r border-slate-800 min-h-screen">
-    <div class="px-5 py-4 border-b border-slate-800">
-      <span class="text-indigo-400 font-bold text-lg tracking-tight">dev-mem</span>
+  <aside class="w-52 flex-shrink-0 flex flex-col bg-slate-950 border-r border-slate-800 min-h-screen">
+
+    <!-- Logo -->
+    <div class="px-4 py-4 border-b border-slate-800 flex items-center gap-2">
+      <div class="w-6 h-6 rounded-md bg-indigo-600 flex items-center justify-center flex-shrink-0">
+        <svg class="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+          <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/>
+        </svg>
+      </div>
+      <span class="text-white font-semibold text-sm tracking-tight">dev-mem</span>
     </div>
-    <nav class="flex-1 px-3 py-4 space-y-1">
+
+    <!-- Primary nav -->
+    <nav class="flex-1 px-2 pt-3 pb-2 flex flex-col gap-0.5 overflow-y-auto">
+
       <a href="{{ url_for('index') }}"
          class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0h6"/></svg>
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0h6"/>
+        </svg>
         Home
       </a>
+
       <a href="{{ url_for('projects') }}"
          class="nav-link {% if request.endpoint in ('projects','project_detail') %}active{% endif %}">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+        </svg>
         Projects
       </a>
+
+      <a href="{{ url_for('memory') }}"
+         class="nav-link {% if request.endpoint == 'memory' %}active{% endif %}">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+        </svg>
+        Memory
+      </a>
+
       <a href="{{ url_for('analytics') }}"
          class="nav-link {% if request.endpoint == 'analytics' %}active{% endif %}">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+        </svg>
         Analytics
       </a>
-      <a href="{{ url_for('prompts') }}"
-         class="nav-link {% if request.endpoint == 'prompts' %}active{% endif %}">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-3 3v-3z"/></svg>
-        Prompts
+
+      <a href="{{ url_for('team') }}"
+         class="nav-link {% if request.endpoint == 'team' %}active{% endif %}">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        Team
       </a>
+
+      <!-- Secondary -->
+      <div class="nav-section-label mt-2">Insights</div>
+
       <a href="{{ url_for('errors') }}"
          class="nav-link {% if request.endpoint == 'errors' %}active{% endif %}">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
         Errors
       </a>
-      <a href="{{ url_for('learnings') }}"
-         class="nav-link {% if request.endpoint == 'learnings' %}active{% endif %}">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
-        Learnings
-      </a>
+
       <a href="{{ url_for('daily_today') }}"
          class="nav-link {% if request.endpoint == 'daily' %}active{% endif %}">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+        </svg>
         Daily
       </a>
+
       <a href="{{ url_for('export_page') }}"
          class="nav-link {% if request.endpoint in ('export_page','export_download') %}active{% endif %}">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+        </svg>
         Export
       </a>
+
     </nav>
-    <div class="px-4 py-3 border-t border-slate-800 text-xs text-slate-500">
-      127.0.0.1:8888
+
+    <!-- SSE status footer -->
+    <div class="px-3 py-2.5 border-t border-slate-800 flex items-center gap-2">
+      <span id="sse-dot" class="w-1.5 h-1.5 rounded-full bg-slate-600 flex-shrink-0 transition-colors"></span>
+      <span id="sse-label" class="text-xs text-slate-600">connecting</span>
+      <span id="live-ts" class="text-xs text-slate-700 ml-auto truncate"></span>
     </div>
   </aside>
 
   <!-- Main -->
   <div class="flex-1 flex flex-col min-h-screen overflow-x-hidden">
+
     <!-- Top bar -->
-    <header class="flex items-center justify-between px-6 py-3 bg-slate-900 border-b border-slate-800">
-      <h1 class="text-sm font-semibold text-slate-300">{% block heading %}{% endblock %}</h1>
+    <header class="flex items-center justify-between px-5 py-2.5 bg-slate-950 border-b border-slate-800 min-h-[44px]">
+      <div class="breadcrumb">
+        {% block breadcrumb %}
+        <h1 class="text-sm font-semibold text-slate-200">{% block heading %}{% endblock %}</h1>
+        {% endblock %}
+      </div>
       <div class="flex items-center gap-3">
         {% block topbar_extra %}{% endblock %}
-        <span class="text-xs text-slate-500">{{ now if now is defined else '' }}</span>
       </div>
     </header>
 
     <!-- Content -->
-    <main class="flex-1 p-6 overflow-y-auto">
+    <main class="flex-1 p-5 overflow-y-auto">
       {% block content %}{% endblock %}
     </main>
   </div>
 
+<script>
+(function () {
+  const dot    = document.getElementById('sse-dot');
+  const label  = document.getElementById('sse-label');
+  const liveTs = document.getElementById('live-ts');
+
+  const STAT_IDS = {
+    commands:        'live-commands',
+    git_events:      'live-git',
+    claude_sessions: 'live-claude',
+    errors:          'live-errors',
+    observations:    'live-obs',
+  };
+
+  const feedEl = document.getElementById('live-feed');
+
+  function connect() {
+    const es = new EventSource('/api/live');
+
+    es.onopen = () => {
+      dot.className = 'w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 transition-colors';
+      label.textContent = 'live';
+      label.className = 'text-xs text-green-600';
+    };
+
+    let _lastObsId = null;
+
+    es.onmessage = (e) => {
+      let d;
+      try { d = JSON.parse(e.data); } catch { return; }
+      if (!d || !d.ts) return;
+
+      liveTs.textContent = d.ts.slice(11, 16);
+
+      // Stat cards
+      for (const [key, id] of Object.entries(STAT_IDS)) {
+        const el = document.getElementById(id);
+        if (el && d[key] !== undefined) {
+          if (el.textContent !== String(d[key])) {
+            el.textContent = d[key];
+            el.classList.add('text-indigo-300');
+            setTimeout(() => el.classList.remove('text-indigo-300'), 500);
+          }
+        }
+      }
+
+      // Live feed (home page)
+      if (feedEl && d.recent_commands && d.recent_commands.length) {
+        feedEl.innerHTML = d.recent_commands.map(r =>
+          `<li class="flex items-start gap-2 py-0.5">
+            <span class="text-slate-600 tabular-nums flex-shrink-0">${r.ts.slice(11,16)}</span>
+            <span class="text-slate-300 font-mono truncate">${escHtml(r.cmd)}</span>
+          </li>`
+        ).join('');
+      }
+
+      // Live prepend new observations (memory page)
+      const obsContainer = document.getElementById('obs-list');
+      if (obsContainer && d.recent_observations && d.recent_observations.length) {
+        const newId = d.recent_observations[0].id;
+        if (_lastObsId === null) {
+          _lastObsId = newId;
+        } else if (newId !== _lastObsId) {
+          const fresh = d.recent_observations.filter(o => o.id > _lastObsId);
+          _lastObsId = newId;
+          fresh.forEach(obs => {
+            const badgeClass = {
+              bugfix: 'obs-bugfix', feature: 'obs-feature', refactor: 'obs-refactor',
+              decision: 'obs-decision', change: 'obs-change', discovery: 'obs-discovery',
+            }[obs.type] || 'obs-discovery';
+            const card = document.createElement('div');
+            card.className = 'card border-indigo-700 transition-colors';
+            card.innerHTML = `
+              <div class="flex items-start gap-3">
+                <span class="obs-badge ${badgeClass} mt-0.5">${escHtml(obs.type)}</span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 mb-0.5">
+                    ${obs.project ? `<span class="text-xs text-slate-500 bg-slate-700 px-1.5 py-0.5 rounded">${escHtml(obs.project)}</span>` : ''}
+                    <span class="text-xs text-slate-600">${escHtml(obs.created_at)}</span>
+                  </div>
+                  <p class="text-sm text-slate-200 truncate">${escHtml(obs.title)}</p>
+                  ${obs.narrative ? `<p class="text-xs text-slate-400 mt-0.5 line-clamp-2">${escHtml(obs.narrative)}</p>` : ''}
+                </div>
+                <span class="text-xs text-slate-700 flex-shrink-0">#${obs.id}</span>
+              </div>`;
+            obsContainer.prepend(card);
+            setTimeout(() => card.classList.replace('border-indigo-700', 'border-slate-700'), 2000);
+          });
+          const heading = document.querySelector('h1');
+          if (heading && d.observations) heading.textContent = `Memory (${d.observations.toLocaleString()} observations)`;
+        }
+      }
+    };
+
+    es.onerror = () => {
+      dot.className = 'w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0';
+      label.textContent = 'offline';
+      label.className = 'text-xs text-red-600';
+      es.close();
+      setTimeout(connect, 5000);
+    };
+  }
+
+  function escHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  connect();
+})();
+</script>
 </body>
 </html>

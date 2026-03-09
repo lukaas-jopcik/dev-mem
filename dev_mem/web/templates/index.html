@@ -2,116 +2,142 @@
 {% block title %}Home — dev-mem{% endblock %}
 {% block heading %}Dashboard{% endblock %}
 
+{% block topbar_extra %}
+<span class="text-xs text-slate-600">{{ today }}</span>
+{% endblock %}
+
 {% block content %}
 
 <!-- Stat cards -->
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
   <div class="stat-card">
-    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Commands today</p>
-    <p class="text-3xl font-bold text-indigo-400">{{ stats.commands }}</p>
+    <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Memories today</p>
+    <p id="live-obs" class="text-2xl font-bold text-indigo-400 transition-colors">{{ obs_today }}</p>
   </div>
   <div class="stat-card">
-    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Commits today</p>
-    <p class="text-3xl font-bold text-indigo-400">{{ stats.git_events }}</p>
+    <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Projects active</p>
+    <p class="text-2xl font-bold text-slate-300">{{ active_projects_today }}</p>
   </div>
   <div class="stat-card">
-    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Avg prompt score</p>
-    <p class="text-3xl font-bold
-      {% if avg_score >= 75 %}text-green-400
-      {% elif avg_score >= 50 %}text-yellow-400
-      {% elif avg_score >= 25 %}text-orange-400
-      {% else %}text-red-400{% endif %}">{{ avg_score }}</p>
+    <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Claude sessions</p>
+    <p id="live-claude" class="text-2xl font-bold text-slate-300 transition-colors">{{ stats.claude_sessions }}</p>
   </div>
   <div class="stat-card">
-    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Active alerts</p>
-    <p class="text-3xl font-bold {% if alerts %}text-red-400{% else %}text-green-400{% endif %}">
-      {{ alerts | length }}
-    </p>
+    <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Errors today</p>
+    <p id="live-errors" class="text-2xl font-bold {% if stats.errors %}text-red-400{% else %}text-green-400{% endif %} transition-colors">{{ stats.errors }}</p>
   </div>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Second row: total memories + commands -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+  <div class="stat-card lg:col-span-2">
+    <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Total memories</p>
+    <p class="text-2xl font-bold text-indigo-300">{{ total_obs | int | string | replace(',', '') }}
+      <span class="text-sm font-normal text-slate-500">observations</span>
+    </p>
+  </div>
+  <div class="stat-card">
+    <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Commands today</p>
+    <p id="live-commands" class="text-2xl font-bold text-slate-300 transition-colors">{{ stats.commands }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Commits today</p>
+    <p id="live-git" class="text-2xl font-bold text-slate-300 transition-colors">{{ stats.git_events }}</p>
+  </div>
+</div>
 
-  <!-- Last 5 commits -->
-  <div class="lg:col-span-2 bg-slate-800 border border-slate-700 rounded-xl p-5">
-    <h2 class="text-sm font-semibold text-slate-300 mb-4">Last 5 Commits</h2>
-    {% if commits %}
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Hash</th>
-          <th>Message</th>
-          <th>Project</th>
-          <th>+/-</th>
-          <th>When</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for c in commits %}
-        <tr>
-          <td class="font-mono text-indigo-400">{{ c.hash[:7] }}</td>
-          <td class="max-w-xs truncate">{{ c.message[:60] }}</td>
-          <td>
-            <span class="text-xs bg-slate-700 rounded px-2 py-0.5">{{ c.project_name or '—' }}</span>
-          </td>
-          <td class="text-xs">
-            <span class="text-green-400">+{{ c.insertions }}</span>
-            <span class="text-red-400 ml-1">-{{ c.deletions }}</span>
-          </td>
-          <td class="text-slate-400 text-xs whitespace-nowrap">{{ c.ts[:10] }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+  <!-- Recent memories (2/3 width) -->
+  <div class="lg:col-span-2 card">
+    <div class="section-header">
+      <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+      </svg>
+      <h2>Recent Memories</h2>
+      <span class="count">live</span>
+      <a href="{{ url_for('memory') }}" class="ml-auto text-xs text-slate-500 hover:text-slate-300">View all →</a>
+    </div>
+    {% if recent_obs %}
+    <ul class="space-y-2">
+      {% for obs in recent_obs %}
+      <li class="flex items-start gap-2.5 py-1.5 border-b border-slate-800 last:border-0">
+        <span class="obs-badge obs-{{ obs.type or 'discovery' }} mt-0.5 flex-shrink-0">
+          {{ (obs.type or 'disc')[:4] }}
+        </span>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm text-slate-200 truncate leading-snug">{{ obs.title }}</p>
+          <p class="text-xs text-slate-500 mt-0.5">
+            {{ obs.project or '—' }} · {{ (obs.created_at or '')[:16] }}
+          </p>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
     {% else %}
-    <p class="text-slate-500 text-sm">No commits recorded yet.</p>
+    <div class="empty-state">
+      <p>No memories yet. Start a Claude session to begin capturing.</p>
+    </div>
     {% endif %}
   </div>
 
   <!-- Right column -->
   <div class="space-y-5">
 
-    <!-- Active alerts -->
-    <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 mb-3">Active Alerts</h2>
-      {% if alerts %}
+    <!-- Live feed -->
+    <div class="card">
+      <div class="section-header">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+        <h2>Live Feed</h2>
+      </div>
+      <ul id="live-feed" class="space-y-0.5 min-h-[2.5rem] text-xs font-mono">
+        <li class="text-slate-600 italic">waiting…</li>
+      </ul>
+    </div>
+
+    <!-- Alerts -->
+    {% if alerts %}
+    <div class="card">
+      <div class="section-header">
+        <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        <h2>Alerts</h2>
+        <span class="count">{{ alerts|length }}</span>
+      </div>
       <ul class="space-y-2">
         {% for a in alerts %}
         <li class="flex items-start gap-2 text-xs">
-          {% if a.type == 'error' %}
-          <span class="mt-0.5 w-2 h-2 rounded-full bg-red-500 flex-shrink-0"></span>
-          {% else %}
-          <span class="mt-0.5 w-2 h-2 rounded-full bg-yellow-400 flex-shrink-0"></span>
-          {% endif %}
+          <span class="mt-0.5 w-1.5 h-1.5 rounded-full flex-shrink-0 {% if a.type == 'error' %}bg-red-500{% else %}bg-yellow-400{% endif %}"></span>
           <span class="text-slate-300">{{ a.message }}</span>
         </li>
         {% endfor %}
       </ul>
-      {% else %}
-      <p class="text-slate-500 text-sm">No active alerts.</p>
-      {% endif %}
     </div>
+    {% endif %}
 
-    <!-- Last 3 learnings -->
-    <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 mb-3">Recent Learnings</h2>
-      {% if learnings %}
-      <ul class="space-y-3">
-        {% for l in learnings %}
-        <li class="text-xs">
-          {% set t = l.type | lower %}
-          <span class="score-badge type-{{ t if t in ['insight','mistake','tip','reference'] else 'default' }}">
-            {{ l.type or 'note' }}
-          </span>
-          <p class="mt-1 text-slate-300 leading-snug">{{ l.text[:100] }}{% if l.text|length > 100 %}…{% endif %}</p>
-          <p class="text-slate-500 mt-0.5">{{ l.project_name or '—' }} · {{ l.ts[:10] }}</p>
+    <!-- Quick nav to projects -->
+    {% if projects %}
+    <div class="card">
+      <div class="section-header">
+        <h2>Projects</h2>
+        <a href="{{ url_for('projects') }}" class="ml-auto text-xs text-slate-500 hover:text-slate-300">All →</a>
+      </div>
+      <ul class="space-y-1">
+        {% for p in projects[:6] %}
+        <li>
+          <a href="{{ url_for('project_detail', name=p.name) }}"
+             class="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-200 py-1 rounded px-1 hover:bg-slate-800 transition-colors">
+            <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background: {{ p.color }}"></span>
+            <span class="truncate">{{ p.name }}</span>
+          </a>
         </li>
         {% endfor %}
       </ul>
-      {% else %}
-      <p class="text-slate-500 text-sm">No learnings yet.</p>
-      {% endif %}
     </div>
+    {% endif %}
 
   </div>
 </div>

@@ -67,12 +67,72 @@ def install() -> None:
 
 
 # ---------------------------------------------------------------------------
+# install-claude
+# ---------------------------------------------------------------------------
+
+@main.command("install-claude")
+def install_claude() -> None:
+    """Configure Claude Code hooks in ~/.claude/settings.json."""
+    import json
+    import os
+
+    settings_path = Path.home() / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Load existing settings
+    existing: dict = {}
+    if settings_path.exists():
+        try:
+            existing = json.loads(settings_path.read_text())
+        except Exception:
+            existing = {}
+
+    hooks = existing.setdefault("hooks", {})
+
+    def _ensure_hook(event: str, command: str) -> None:
+        entries = hooks.setdefault(event, [])
+        for entry in entries:
+            for h in entry.get("hooks", []):
+                if h.get("command") == command:
+                    return  # already present
+        entries.append({"hooks": [{"type": "command", "command": command}]})
+
+    def _ensure_posttooluse_hook(command: str) -> None:
+        entries = hooks.setdefault("PostToolUse", [])
+        for entry in entries:
+            if entry.get("matcher") == ".*":
+                for h in entry.get("hooks", []):
+                    if h.get("command") == command:
+                        return
+        entries.append({"matcher": ".*", "hooks": [{"type": "command", "command": command}]})
+
+    _ensure_hook("SessionStart", "dev-mem collect session-start")
+    _ensure_hook("Stop", "dev-mem collect session-stop")
+    _ensure_hook("PreCompact", "dev-mem collect compact")
+    _ensure_posttooluse_hook("dev-mem collect claude-tool")
+
+    # Add MCP server
+    mcp_servers = existing.setdefault("mcpServers", {})
+    if "dev-mem" not in mcp_servers:
+        mcp_servers["dev-mem"] = {"type": "stdio", "command": "dev-mem", "args": ["mcp-server"]}
+
+    settings_path.write_text(json.dumps(existing, indent=2))
+    console.print(f"[green]Claude Code hooks configured[/green] in {settings_path}")
+    console.print("Restart Claude Code to activate session memory.")
+
+
+# ---------------------------------------------------------------------------
 # init
 # ---------------------------------------------------------------------------
 
 @main.command()
 def init() -> None:
-    """Initialize dev-mem tracking in the current git repository."""
+    """Register current git repository as a tracked project.
+
+    Note: commit tracking is automatic via the global git hook set up by
+    'dev-mem install' — no per-repo setup is required for that.
+    This command only registers the project name/path in dev-mem settings.
+    """
     cwd = Path.cwd()
     git_dir = cwd / ".git"
     if not git_dir.is_dir():
@@ -86,16 +146,11 @@ def init() -> None:
         console.print(f"[green]Initialized dev-mem in[/green] {cwd}")
         console.print("Run [bold]dev-mem doctor[/bold] to verify the setup.")
     except ImportError:
-        # Fallback: just create the hook stub
-        hook_path = git_dir / "hooks" / "post-commit"
-        if not hook_path.exists():
-            hook_path.write_text(
-                "#!/bin/sh\ndev-mem _collect git-commit \"$PWD\"\n", encoding="utf-8"
-            )
-            hook_path.chmod(0o755)
-            console.print(f"[green]Created git hook:[/green] {hook_path}")
-        else:
-            console.print(f"[yellow]Hook already exists:[/yellow] {hook_path}")
+        settings = _settings()
+        settings.add_project(str(cwd))
+        settings.save()
+        console.print(f"[green]Project registered:[/green] {cwd}")
+        console.print("[dim]Commit tracking is automatic via global git hook.[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +174,7 @@ def status() -> None:
 
     rows = [
         ("Commands logged", stats.get("commands", 0)),
-        ("Git commits", stats.get("commits", 0)),
+        ("Git commits", stats.get("git_events", 0)),
         ("Claude sessions", stats.get("claude_sessions", 0)),
         ("Errors logged", stats.get("errors", 0)),
     ]
@@ -244,12 +299,157 @@ def add(path: str) -> None:
     project_path = Path(path).resolve()
     try:
         settings = _settings()
-        settings.add_project(str(project_path))
-        settings.save()
-        console.print(f"[green]Project added:[/green] {project_path}")
+        db = _db()(settings.db_path)
+        is_git = 1 if (project_path / ".git").is_dir() else 0
+        db.upsert_project(project_path.name, str(project_path))
+        db._conn.execute(
+            "UPDATE projects SET is_git=? WHERE path=?", (is_git, str(project_path))
+        )
+        db._conn.commit()
+        db.close()
+        console.print(f"[green]Project added:[/green] {project_path} ({'git' if is_git else 'local'})")
     except Exception as exc:  # noqa: BLE001
         console.print(f"[red]Failed to add project:[/red] {exc}")
         sys.exit(1)
+
+
+@project.command()
+@click.argument("path", type=click.Path(exists=True, file_okay=False))
+@click.option("--depth", default=1, show_default=True, help="How many levels deep to scan.")
+def scan(path: str, depth: int) -> None:
+    """Scan a directory and register all subdirectories as projects."""
+    import os
+    root = Path(path).resolve()
+    settings = _settings()
+    db = _db()(settings.db_path)
+
+    added = 0
+    skipped = 0
+
+    def _scan(directory: Path, current_depth: int) -> None:
+        nonlocal added, skipped
+        if current_depth > depth:
+            return
+        try:
+            entries = [e for e in directory.iterdir() if e.is_dir() and not e.name.startswith('.')]
+        except PermissionError:
+            return
+        for entry in sorted(entries):
+            is_git = 1 if (entry / ".git").is_dir() else 0
+            existing = db._conn.execute(
+                "SELECT id FROM projects WHERE path=?", (str(entry),)
+            ).fetchone()
+            if existing:
+                skipped += 1
+            else:
+                db.upsert_project(entry.name, str(entry))
+                db._conn.execute(
+                    "UPDATE projects SET is_git=? WHERE path=?", (is_git, str(entry))
+                )
+                db._conn.commit()
+                label = "[cyan]git[/cyan]" if is_git else "[dim]local[/dim]"
+                console.print(f"  {label}  {entry.name}")
+                added += 1
+            if current_depth < depth:
+                _scan(entry, current_depth + 1)
+
+    console.print(f"Scanning [bold]{root}[/bold]…")
+    _scan(root, 1)
+    db.close()
+    console.print(f"\n[green]Done.[/green] Added {added}, skipped {skipped} existing.")
+
+
+@project.command("sync-memory")
+def sync_memory() -> None:
+    """Link observations to projects by matching project name, and backfill activity stats."""
+    settings = _settings()
+    db = _db()(settings.db_path)
+    conn = db._conn
+
+    # 1. Get all projects indexed by name (lowercase)
+    projects = {
+        row["name"].lower(): row
+        for row in conn.execute("SELECT * FROM projects WHERE active=1").fetchall()
+    }
+
+    # 2. Get all distinct project names from observations
+    obs_projects = [
+        row[0] for row in conn.execute(
+            "SELECT DISTINCT project FROM observations WHERE project <> '' AND project_id IS NULL"
+        ).fetchall()
+    ]
+
+    linked = 0
+    created = 0
+    unmatched = []
+
+    for obs_project in obs_projects:
+        match = projects.get(obs_project.lower())
+        if match:
+            pid = match["id"]
+        else:
+            # Try partial match (e.g. "imaketoday-video" → imaketoday-video folder)
+            partial = next(
+                (p for name, p in projects.items() if obs_project.lower() in name or name in obs_project.lower()),
+                None,
+            )
+            if partial:
+                pid = partial["id"]
+                match = partial
+            else:
+                unmatched.append(obs_project)
+                continue
+
+        count = conn.execute(
+            "UPDATE observations SET project_id=? WHERE project=? AND project_id IS NULL",
+            (pid, obs_project),
+        ).rowcount
+        conn.commit()
+        linked += count
+        console.print(f"  [green]linked[/green] {count:>5} obs  →  [bold]{match['name']}[/bold]")
+
+    # 3. Backfill last_accessed on projects from observations timestamps
+    conn.execute("""
+        UPDATE projects SET last_accessed = (
+            SELECT MAX(created_at) FROM observations WHERE observations.project_id = projects.id
+        )
+        WHERE last_accessed IS NULL
+    """)
+    conn.commit()
+    db.close()
+
+    console.print(f"\n[green]Done.[/green] Linked {linked} observations across {len(obs_projects) - len(unmatched)} projects.")
+    if unmatched:
+        console.print(f"[yellow]Unmatched project names:[/yellow] {', '.join(unmatched)}")
+        console.print("  Run [bold]dev-mem project scan <path>[/bold] to register missing directories.")
+
+
+@project.command("auto-register", hidden=True)
+@click.argument("cwd")
+def auto_register(cwd: str) -> None:
+    """Auto-register current directory when cd-ing into it (called from shell hook)."""
+    p = Path(cwd).resolve()
+    if not p.is_dir():
+        return
+    try:
+        settings = _settings()
+        db = _db()(settings.db_path)
+        existing = db._conn.execute(
+            "SELECT id FROM projects WHERE path=?", (str(p),)
+        ).fetchone()
+        if not existing:
+            is_git = 1 if (p / ".git").is_dir() else 0
+            db.upsert_project(p.name, str(p))
+            db._conn.execute(
+                "UPDATE projects SET is_git=? WHERE path=?", (is_git, str(p))
+            )
+        db._conn.execute(
+            "UPDATE projects SET last_accessed=datetime('now') WHERE path=?", (str(p),)
+        )
+        db._conn.commit()
+        db.close()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -267,7 +467,7 @@ def web(port: int, host: str) -> None:
     try:
         from dev_mem.web.app import create_app  # noqa: PLC0415
         app = create_app()
-        app.run(host=host, port=port, debug=False)
+        app.run(host=host, port=port, debug=False, threaded=True)
     except ImportError as exc:
         console.print(f"[red]Web module not available:[/red] {exc}")
         sys.exit(1)
@@ -476,6 +676,25 @@ def archive(days: Optional[int]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# memory sub-group (observations / claude-mem 2-in-1)
+# ---------------------------------------------------------------------------
+
+from dev_mem.memory.cli_memory import memory_group  # noqa: E402
+main.add_command(memory_group)
+
+
+# ---------------------------------------------------------------------------
+# mcp-server
+# ---------------------------------------------------------------------------
+
+@main.command("mcp-server")
+def mcp_server() -> None:
+    """Start the MCP server (stdio JSON-RPC 2.0 mode)."""
+    from dev_mem.mcp.server import run_server  # noqa: PLC0415
+    run_server()
+
+
+# ---------------------------------------------------------------------------
 # Internal collect hook (called from shell/git hooks)
 # ---------------------------------------------------------------------------
 
@@ -491,3 +710,61 @@ def _collect(event_type: str, payload: str) -> None:
                         project=settings.active_project)
     except Exception:  # noqa: BLE001
         pass  # Silent — hooks must never interrupt the developer's workflow
+
+
+# ---------------------------------------------------------------------------
+# collect sub-group (called from shell/git hooks via dev-mem binary)
+# ---------------------------------------------------------------------------
+
+@main.group(hidden=True)
+def collect() -> None:
+    """Internal: collect events from shell/git hooks."""
+
+
+@collect.command()
+@click.option("--cmd", required=True)
+@click.option("--duration", type=int, default=0)
+@click.option("--exit-code", "exit_code", type=int, default=0)
+@click.option("--cwd", default=None)
+def terminal(cmd: str, duration: int, exit_code: int, cwd: Optional[str]) -> None:
+    """Record a shell command (called from preexec/precmd hooks)."""
+    from dev_mem.collectors.terminal import main as _run  # noqa: PLC0415
+    args = ["--cmd", cmd, "--duration", str(duration), "--exit-code", str(exit_code)]
+    if cwd:
+        args += ["--cwd", cwd]
+    _run(args)
+
+
+@collect.command("git-commit")
+def collect_git() -> None:
+    """Record the latest git commit (called from post-commit hook)."""
+    from dev_mem.collectors.git import main as _run  # noqa: PLC0415
+    _run()
+
+
+@collect.command("session-start")
+def collect_session_start() -> None:
+    """SessionStart hook — injects memory context into Claude session."""
+    from dev_mem.collectors.session_start import main as _run  # noqa: PLC0415
+    _run()
+
+
+@collect.command("session-stop")
+def collect_session_stop() -> None:
+    """Stop hook — records end of Claude session."""
+    from dev_mem.collectors.session_stop import main as _run  # noqa: PLC0415
+    _run()
+
+
+@collect.command("claude-tool")
+def collect_claude_tool() -> None:
+    """PostToolUse hook — records Claude tool calls and extracts observations."""
+    from dev_mem.collectors.claude_code import main as _run  # noqa: PLC0415
+    _run()
+
+
+@collect.command("compact")
+def collect_compact() -> None:
+    """PreCompact hook — saves session state before context window compression."""
+    from dev_mem.collectors.compact import main as _run  # noqa: PLC0415
+    _run()

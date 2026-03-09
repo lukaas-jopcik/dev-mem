@@ -1,27 +1,72 @@
 /* dev-mem custom styles — Tailwind does heavy lifting */
 
-/* Sidebar nav links */
+/* ── Sidebar ─────────────────────────────────────────── */
+
 .nav-link {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.45rem 0.75rem;
+  padding: 0.4rem 0.65rem;
   border-radius: 0.375rem;
-  font-size: 0.875rem;
-  color: #94a3b8; /* slate-400 */
+  font-size: 0.8125rem;
+  color: #94a3b8;
   text-decoration: none;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.12s, color 0.12s;
 }
 .nav-link:hover {
-  background: #1e293b; /* slate-800 */
-  color: #e2e8f0; /* slate-200 */
+  background: #1e293b;
+  color: #e2e8f0;
 }
 .nav-link.active {
-  background: #312e81; /* indigo-900 */
-  color: #a5b4fc; /* indigo-300 */
+  background: #1e1b4b;
+  color: #a5b4fc;
+  font-weight: 500;
+}
+.nav-link.active svg {
+  color: #818cf8;
 }
 
-/* Score badges */
+.nav-section-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #475569;
+  padding: 0.25rem 0.65rem;
+  margin-top: 0.5rem;
+}
+
+/* ── Breadcrumb ──────────────────────────────────────── */
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.875rem;
+}
+.breadcrumb-sep {
+  color: #475569;
+  font-size: 0.75rem;
+  user-select: none;
+}
+.breadcrumb-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #64748b;
+  text-decoration: none;
+  font-size: 0.8125rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+  transition: color 0.12s, background 0.12s;
+}
+.breadcrumb-back:hover {
+  color: #e2e8f0;
+  background: #1e293b;
+}
+
+/* ── Score badges ────────────────────────────────────── */
+
 .score-badge {
   display: inline-block;
   padding: 0.15rem 0.55rem;
@@ -34,7 +79,8 @@
 .score-orange { background: #7c2d12; color: #fdba74; }
 .score-red    { background: #450a0a; color: #fca5a5; }
 
-/* Frequency badge */
+/* ── Frequency badge ─────────────────────────────────── */
+
 .freq-badge {
   display: inline-block;
   padding: 0.15rem 0.55rem;
@@ -46,21 +92,42 @@
 }
 .freq-badge.high { background: #450a0a; color: #fca5a5; }
 
-/* Learning type badges */
+/* ── Learning type badges ────────────────────────────── */
+
 .type-insight   { background: #1e3a5f; color: #93c5fd; }
 .type-mistake   { background: #450a0a; color: #fca5a5; }
 .type-tip       { background: #14532d; color: #86efac; }
 .type-reference { background: #2e1065; color: #c4b5fd; }
 .type-default   { background: #1e293b; color: #94a3b8; }
 
-/* Command heatmap grid */
+/* ── Observation type badges ─────────────────────────── */
+
+.obs-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.45rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+.obs-discovery { background: #1e293b; color: #94a3b8; }
+.obs-feature   { background: #14532d; color: #86efac; }
+.obs-bugfix    { background: #450a0a; color: #fca5a5; }
+.obs-change    { background: #451a03; color: #fcd34d; }
+.obs-decision  { background: #2e1065; color: #c4b5fd; }
+.obs-refactor  { background: #1e3a5f; color: #93c5fd; }
+
+/* ── Heatmap ─────────────────────────────────────────── */
+
 .heatmap-grid {
   display: grid;
   grid-template-columns: 3rem repeat(7, 1fr);
   gap: 2px;
 }
 .heatmap-cell {
-  height: 20px;
+  height: 18px;
   border-radius: 3px;
   background: #1e293b;
 }
@@ -78,45 +145,80 @@
   padding-right: 4px;
 }
 
-/* Stat card */
+/* ── Stat card ───────────────────────────────────────── */
+
 .stat-card {
   background: #1e293b;
   border: 1px solid #334155;
   border-radius: 0.75rem;
-  padding: 1.25rem 1.5rem;
+  padding: 1rem 1.25rem;
+  transition: border-color 0.15s;
+}
+.stat-card:hover {
+  border-color: #475569;
 }
 
-/* Table styles */
+/* ── Section header ──────────────────────────────────── */
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.section-header h2 {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.section-header .count {
+  font-size: 0.75rem;
+  color: #475569;
+}
+
+/* ── Card (generic panel) ────────────────────────────── */
+
+.card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+}
+
+/* ── Table styles ────────────────────────────────────── */
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  font-size: 0.8125rem;
 }
 .data-table th {
   text-align: left;
-  padding: 0.5rem 0.75rem;
+  padding: 0.45rem 0.65rem;
   color: #64748b;
   font-weight: 500;
   border-bottom: 1px solid #334155;
   text-transform: uppercase;
-  font-size: 0.7rem;
-  letter-spacing: 0.05em;
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
 }
 .data-table td {
-  padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid #1e293b;
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid #0f172a;
   color: #cbd5e1;
   vertical-align: top;
 }
-.data-table tr:hover td {
-  background: #1e293b;
-}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: #0f172a; }
 
-/* Health bar */
+/* ── Health bar ──────────────────────────────────────── */
+
 .health-bar-bg {
   background: #334155;
   border-radius: 9999px;
-  height: 6px;
+  height: 4px;
   overflow: hidden;
 }
 .health-bar-fill {
@@ -125,3 +227,31 @@
   background: #6366f1;
   transition: width 0.3s;
 }
+
+/* ── Input sm ────────────────────────────────────────── */
+
+.input-sm {
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.6rem;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.375rem;
+  color: #e2e8f0;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.input-sm:focus { border-color: #6366f1; }
+
+/* ── Empty state ─────────────────────────────────────── */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 1rem;
+  color: #475569;
+  text-align: center;
+}
+.empty-state svg { color: #334155; margin-bottom: 0.75rem; }
+.empty-state p { font-size: 0.875rem; }

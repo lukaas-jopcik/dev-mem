@@ -1,50 +1,57 @@
 {% extends "base.html" %}
 {% block title %}Analytics — dev-mem{% endblock %}
-{% block heading %}Analytics{% endblock %}
+{% block breadcrumb %}
+<h1 class="text-sm font-semibold text-slate-200">Analytics</h1>
+{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
 
-  <!-- Top row: score trend + time per project -->
+  <!-- Top row: obs per day + obs per project -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
     <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 mb-4">Prompt Score Trend (30 days)</h2>
-      <canvas id="scoreTrendChart" height="200"></canvas>
+      <h2 class="text-sm font-semibold text-slate-300 mb-4">Memory Activity (30 days)</h2>
+      <canvas id="dailyObsChart" height="200"></canvas>
     </div>
 
     <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 mb-4">Time Per Project (hrs)</h2>
-      <canvas id="timeProjectChart" height="200"></canvas>
+      <h2 class="text-sm font-semibold text-slate-300 mb-4">Memories per Project (30 days)</h2>
+      <canvas id="projectObsChart" height="200"></canvas>
     </div>
 
   </div>
 
-  <!-- Command heatmap -->
-  <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
-    <h2 class="text-sm font-semibold text-slate-300 mb-4">Command Heatmap (Hour x Day)</h2>
-    <div class="overflow-x-auto">
-      <div id="heatmapContainer">
-        <div class="heatmap-grid" id="heatmapGrid">
-          <!-- built by JS -->
-        </div>
+  <!-- Type breakdown + heatmap -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-slate-300 mb-4">Memory Types</h2>
+      <canvas id="typeBreakdownChart" height="220"></canvas>
+    </div>
+
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-5 lg:col-span-2">
+      <h2 class="text-sm font-semibold text-slate-300 mb-4">Activity Heatmap (Hour × Day)</h2>
+      <div class="overflow-x-auto">
+        <div class="heatmap-grid" id="heatmapGrid"></div>
+      </div>
+      <div class="flex items-center gap-2 mt-3 text-xs text-slate-500">
+        <span>Less</span>
+        <span class="heatmap-cell w-4" data-level="0"></span>
+        <span class="heatmap-cell w-4" data-level="1"></span>
+        <span class="heatmap-cell w-4" data-level="2"></span>
+        <span class="heatmap-cell w-4" data-level="3"></span>
+        <span class="heatmap-cell w-4" data-level="4"></span>
+        <span>More</span>
       </div>
     </div>
-    <div class="flex items-center gap-2 mt-3 text-xs text-slate-500">
-      <span>Less</span>
-      <span class="heatmap-cell w-4" data-level="0"></span>
-      <span class="heatmap-cell w-4" data-level="1"></span>
-      <span class="heatmap-cell w-4" data-level="2"></span>
-      <span class="heatmap-cell w-4" data-level="3"></span>
-      <span class="heatmap-cell w-4" data-level="4"></span>
-      <span>More</span>
-    </div>
+
   </div>
 
-  <!-- Error frequency -->
+  <!-- Error frequency (kept, has real data) -->
   <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
     <h2 class="text-sm font-semibold text-slate-300 mb-4">Error Frequency (Top 10)</h2>
-    <canvas id="errorFreqChart" height="180"></canvas>
+    <canvas id="errorFreqChart" height="160"></canvas>
   </div>
 
 </div>
@@ -52,50 +59,37 @@
 <script>
 const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
+const TYPE_COLORS = {
+  discovery: '#64748b',
+  feature:   '#22c55e',
+  bugfix:    '#ef4444',
+  change:    '#f59e0b',
+  decision:  '#a855f7',
+  refactor:  '#3b82f6',
+};
+
 Chart.defaults.color = '#94a3b8';
 Chart.defaults.borderColor = '#334155';
 
 async function loadCharts() {
-  const resp = await fetch('/api/stats?days=30');
-  const data = await resp.json();
+  const [obsData, statsData] = await Promise.all([
+    fetch('/api/obs-stats?days=30').then(r => r.json()),
+    fetch('/api/stats?days=30').then(r => r.json()),
+  ]);
 
-  // Score trend chart
-  const scoreTrendCtx = document.getElementById('scoreTrendChart').getContext('2d');
-  new Chart(scoreTrendCtx, {
+  // Daily obs line chart
+  new Chart(document.getElementById('dailyObsChart').getContext('2d'), {
     type: 'line',
     data: {
-      labels: data.score_trend.map(d => d.date),
+      labels: obsData.daily_obs.map(d => d.date),
       datasets: [{
-        label: 'Avg Score',
-        data: data.score_trend.map(d => d.score),
+        label: 'Memories',
+        data: obsData.daily_obs.map(d => d.count),
         borderColor: '#6366f1',
         backgroundColor: 'rgba(99,102,241,0.1)',
         tension: 0.3,
         fill: true,
-        pointRadius: 3,
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: false } },
-      scales: {
-        y: { min: 0, max: 100, grid: { color: '#1e293b' } },
-        x: { grid: { color: '#1e293b' } }
-      }
-    }
-  });
-
-  // Time per project bar chart
-  const timeProjectCtx = document.getElementById('timeProjectChart').getContext('2d');
-  new Chart(timeProjectCtx, {
-    type: 'bar',
-    data: {
-      labels: data.time_per_project.map(d => d.project),
-      datasets: [{
-        label: 'Hours',
-        data: data.time_per_project.map(d => d.hours),
-        backgroundColor: '#6366f1',
-        borderRadius: 4,
+        pointRadius: 2,
       }]
     },
     options: {
@@ -108,19 +102,15 @@ async function loadCharts() {
     }
   });
 
-  // Heatmap
-  buildHeatmap(data.heatmap);
-
-  // Error frequency
-  const errCtx = document.getElementById('errorFreqChart').getContext('2d');
-  new Chart(errCtx, {
+  // Project obs horizontal bar
+  new Chart(document.getElementById('projectObsChart').getContext('2d'), {
     type: 'bar',
     data: {
-      labels: data.error_freq.map(d => d.text.length > 40 ? d.text.slice(0,40)+'…' : d.text),
+      labels: obsData.project_counts.map(d => d.project),
       datasets: [{
-        label: 'Count',
-        data: data.error_freq.map(d => d.count),
-        backgroundColor: '#ef4444',
+        label: 'Memories',
+        data: obsData.project_counts.map(d => d.count),
+        backgroundColor: '#6366f1',
         borderRadius: 4,
       }]
     },
@@ -134,10 +124,60 @@ async function loadCharts() {
       }
     }
   });
+
+  // Type doughnut
+  new Chart(document.getElementById('typeBreakdownChart').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: obsData.type_breakdown.map(d => d.type),
+      datasets: [{
+        data: obsData.type_breakdown.map(d => d.count),
+        backgroundColor: obsData.type_breakdown.map(d => TYPE_COLORS[d.type] || '#475569'),
+        borderWidth: 1,
+        borderColor: '#1e293b',
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { boxWidth: 12, padding: 8, font: { size: 11 } }
+        }
+      }
+    }
+  });
+
+  // Heatmap from obs
+  buildHeatmap(obsData.heatmap);
+
+  // Error frequency
+  if (statsData.error_freq && statsData.error_freq.length) {
+    new Chart(document.getElementById('errorFreqChart').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: statsData.error_freq.map(d => d.text.length > 40 ? d.text.slice(0,40)+'…' : d.text),
+        datasets: [{
+          label: 'Count',
+          data: statsData.error_freq.map(d => d.count),
+          backgroundColor: '#ef4444',
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { beginAtZero: true, grid: { color: '#1e293b' } },
+          y: { grid: { color: '#1e293b' } }
+        }
+      }
+    });
+  }
 }
 
 function buildHeatmap(heatmapData) {
-  // Build lookup: [hour][dow] = count
   const lookup = {};
   let maxCount = 1;
   heatmapData.forEach(d => {
@@ -147,7 +187,6 @@ function buildHeatmap(heatmapData) {
   });
 
   const grid = document.getElementById('heatmapGrid');
-  // Day header row
   const emptyHeader = document.createElement('div');
   emptyHeader.className = 'heatmap-label';
   grid.appendChild(emptyHeader);
@@ -158,7 +197,6 @@ function buildHeatmap(heatmapData) {
     grid.appendChild(lbl);
   });
 
-  // Hour rows (0–23)
   for (let h = 0; h < 24; h++) {
     const lbl = document.createElement('div');
     lbl.className = 'heatmap-label';
@@ -171,7 +209,7 @@ function buildHeatmap(heatmapData) {
       cell.className = 'heatmap-cell';
       const level = count === 0 ? 0 : Math.min(4, Math.ceil((count / maxCount) * 4));
       cell.setAttribute('data-level', level);
-      cell.title = `${DAYS[d]} ${String(h).padStart(2,'0')}:00 — ${count} commands`;
+      cell.title = `${DAYS[d]} ${String(h).padStart(2,'0')}:00 — ${count} memories`;
       grid.appendChild(cell);
     }
   }

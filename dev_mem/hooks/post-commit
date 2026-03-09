@@ -4,4 +4,4 @@
 #
 # Records the latest commit to the dev-mem database.
 # Runs in the background so it never blocks the git workflow.
-python3 -m dev_mem.collectors.git &
+dev-mem collect git-commit &

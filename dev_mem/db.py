@@ -415,16 +415,37 @@ class Database:
         """Alias for get_today_stats — returns today's activity counts."""
         return self.get_today_stats(project_id)
 
-    def daily_summary(self, project_id: Optional[int] = None, date: Optional[str] = None) -> Optional[dict]:
-        """Get a stored daily summary for a project and date."""
+    def daily_summary(self, project_id: Optional[int] = None, date: Optional[str] = None) -> str:
+        """Return a formatted string summary of today's activity."""
         if date is None:
             date = datetime.now().strftime("%Y-%m-%d")
         pid = project_id or self._default_project_id()
+        # Try stored summary first
         row = self._conn.execute(
-            "SELECT * FROM daily_summaries WHERE project_id=? AND date=? ORDER BY generated_at DESC LIMIT 1",
+            "SELECT md_content FROM daily_summaries WHERE project_id=? AND date=? ORDER BY generated_at DESC LIMIT 1",
             (pid, date)
         ).fetchone()
-        return dict(row) if row else None
+        if row and row[0]:
+            return row[0]
+        # Build on-the-fly from raw data
+        stats = self.get_today_stats(pid)
+        lines = [
+            f"Date: {date}",
+            f"Commands run:    {stats.get('commands', 0)}",
+            f"Git commits:     {stats.get('git_events', 0)}",
+            f"Claude sessions: {stats.get('claude_sessions', 0)}",
+            f"Errors logged:   {stats.get('errors', 0)}",
+            f"Learnings saved: {stats.get('learnings', 0)}",
+        ]
+        recent_commits = self._conn.execute(
+            "SELECT message FROM git_events WHERE ts LIKE ? ORDER BY ts DESC LIMIT 5",
+            (f"{date}%",)
+        ).fetchall()
+        if recent_commits:
+            lines.append("\nRecent commits:")
+            for c in recent_commits:
+                lines.append(f"  • {c[0][:80]}")
+        return "\n".join(lines)
 
     def save_note(self, text: str, project_id: Optional[int] = None,
                   note_type: str = "insight", project: Optional[str] = None) -> int:
@@ -440,29 +461,57 @@ class Database:
         return self.insert_decision(pid, title, context, reasoning or decision, alternatives)
 
     def export(self, fmt: str = "json", project_id: Optional[int] = None,
-               date_start: Optional[str] = None, date_end: Optional[str] = None) -> list:
-        """Export data as list of dicts. fmt is 'json' or 'csv' (same data, caller serializes)."""
+               date_start: Optional[str] = None, date_end: Optional[str] = None) -> str:
+        """Export activity data as a serialized string (JSON, CSV, or Markdown)."""
+        import csv
+        import io
         pid = project_id or self._default_project_id()
         rows = self._conn.execute(
             "SELECT * FROM commands WHERE project_id=? ORDER BY ts DESC LIMIT 1000", (pid,)
         ).fetchall()
-        return [dict(r) for r in rows]
+        data = [dict(r) for r in rows]
+        if fmt == "json":
+            return json.dumps(data, indent=2, default=str)
+        if fmt == "csv":
+            if not data:
+                return ""
+            buf = io.StringIO()
+            writer = csv.DictWriter(buf, fieldnames=data[0].keys())
+            writer.writeheader()
+            writer.writerows(data)
+            return buf.getvalue()
+        if fmt == "markdown":
+            if not data:
+                return "No data."
+            cols = list(data[0].keys())
+            header = "| " + " | ".join(cols) + " |"
+            sep = "| " + " | ".join("---" for _ in cols) + " |"
+            body = "\n".join(
+                "| " + " | ".join(str(row.get(c, "")) for c in cols) + " |"
+                for row in data
+            )
+            return "\n".join([header, sep, body])
+        return json.dumps(data, indent=2, default=str)
 
-    def migrate(self) -> None:
-        """Run pending migrations. Alias for run_migrations."""
+    def migrate(self) -> int:
+        """Run pending migrations and return the current schema version."""
         import pathlib
         migrations_dir = pathlib.Path(__file__).parent.parent / "migrations"
         self.run_migrations(str(migrations_dir))
+        row = self._conn.execute(
+            "SELECT MAX(version) FROM schema_versions"
+        ).fetchone()
+        return row[0] if row and row[0] else 0
 
-    def archive(self, older_than_days: int = 90) -> dict:
-        """Archive old data per retention policy. Returns counts of archived rows."""
-        cutoff = int((datetime.now() - timedelta(days=older_than_days)).timestamp())
-        archived = {}
+    def archive(self, older_than_days: int = 90) -> int:
+        """Delete entries older than N days. Returns total count of deleted rows."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=older_than_days)).isoformat()
+        total = 0
         for table, ts_col in [("commands", "ts"), ("file_events", "ts"), ("claude_sessions", "ts")]:
             result = self._conn.execute(f"DELETE FROM {table} WHERE {ts_col} < ?", (cutoff,))
-            archived[table] = result.rowcount
+            total += result.rowcount
         self._conn.commit()
-        return archived
+        return total
 
     def record_event(self, event_type: str, payload: Any = None,
                      project_id: Optional[int] = None, project: Optional[str] = None) -> None:
@@ -479,12 +528,12 @@ class Database:
         elif event_type == "git-commit":
             self.insert_git_event(pid, p.get("hash", ""), p.get("message", ""), [], 0, 0)
 
-    def _default_project_id(self) -> int:
-        """Return the first active project ID, or 1 as fallback."""
+    def _default_project_id(self) -> Optional[int]:
+        """Return the first active project ID, or None if no projects exist."""
         row = self._conn.execute(
             "SELECT id FROM projects WHERE active=1 ORDER BY id LIMIT 1"
         ).fetchone()
-        return row[0] if row else 1
+        return row[0] if row else None
 
     # ------------------------------------------------------------------
     # Connection accessor (for web app)

@@ -29,7 +29,7 @@ from typing import Any, Optional
 # Hard timeout: 50 ms
 # ---------------------------------------------------------------------------
 
-_TIMEOUT_SECONDS = 0.050
+_TIMEOUT_SECONDS = 0.500
 
 # Maximum characters kept for input/output summaries
 _SUMMARY_MAX = 500
@@ -109,24 +109,32 @@ def _run() -> None:
     except (json.JSONDecodeError, OSError):
         return
 
-    tool: str = payload.get("tool", "")
+    # Claude Code sends tool_name/tool_input/tool_response (PostToolUse format)
+    tool: str = payload.get("tool_name") or payload.get("tool", "")
     session_id: str = payload.get("session_id", "")
-    input_obj: Any = payload.get("input", {})
-    output_obj: Any = payload.get("output", {})
+    input_obj: Any = payload.get("tool_input") or payload.get("input", {})
+    output_obj: Any = payload.get("tool_response") or payload.get("output", {})
 
     input_summary = _truncate(_to_str(input_obj))
     output_summary = _truncate(_to_str(output_obj))
 
-    from dev_mem.db import Database
-    from dev_mem.settings import DB_PATH
+    # memory_session_id: prefer env var (set by Claude Code), fall back to payload
+    memory_session_id: str = os.environ.get("CLAUDE_SESSION_ID") or session_id
 
+    from dev_mem.db import Database
+    from dev_mem.settings import DB_PATH, Settings
+
+    settings = Settings()
     db = Database(DB_PATH)
     try:
         # Auto-detect project from cwd
         project_id: Optional[int] = None
-        row = db.get_project_by_path(os.getcwd())
+        project_name: str = ""
+        cwd = os.getcwd()
+        row = db.get_project_by_path(cwd)
         if row:
             project_id = row["id"]
+            project_name = row["name"] if "name" in row.keys() else ""
 
         # Detect errors in the full output string (before truncation)
         full_output = _to_str(output_obj)
@@ -166,8 +174,78 @@ def _run() -> None:
                     text=_truncate(prompt_text),
                     source="claude_code",
                 )
+
+        # ------------------------------------------------------------------
+        # Memory subsystem: session tracking + observation generation
+        # ------------------------------------------------------------------
+        if memory_session_id and settings.get("observations_enabled", True):
+            _record_memory(
+                conn=db._conn,
+                tool=tool,
+                input_obj=input_obj,
+                output_obj=output_obj,
+                memory_session_id=memory_session_id,
+                project_id=project_id,
+                project_name=project_name,
+                cwd=cwd,
+                settings=settings,
+            )
+
     finally:
         db.close()
+
+
+def _record_memory(
+    conn: Any,
+    tool: str,
+    input_obj: Any,
+    output_obj: Any,
+    memory_session_id: str,
+    project_id: Optional[int],
+    project_name: str,
+    cwd: str,
+    settings: Any,
+) -> None:
+    """
+    Track session + generate observations.  Runs inside the 50 ms budget.
+    All errors are swallowed — memory must never block the workflow.
+    """
+    try:
+        from dev_mem.memory.session_tracker import (
+            get_or_create_session,
+            increment_session_tool_count,
+            increment_session_obs_count,
+        )
+        from dev_mem.memory.observations import generate_observation_from_tool_call, insert_observation
+
+        # Ensure session row exists
+        get_or_create_session(conn, memory_session_id, project_id, project_name, cwd)
+        increment_session_tool_count(conn, memory_session_id)
+
+        # Generate observation
+        obs_tools = settings.get("observations_obs_tools", ["Read", "Write", "Edit", "Bash", "MultiEdit"])
+        if tool not in obs_tools:
+            return
+
+        min_chars = settings.get("observations_min_output_chars", 100)
+        obs_kwargs = generate_observation_from_tool_call(
+            tool, input_obj, output_obj, min_output_chars=min_chars
+        )
+        if obs_kwargs is None:
+            return
+
+        insert_observation(
+            conn,
+            **obs_kwargs,
+            project=project_name,
+            project_id=project_id,
+            session_id=memory_session_id,
+            memory_session_id=memory_session_id,
+        )
+        increment_session_obs_count(conn, memory_session_id)
+
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # ---------------------------------------------------------------------------

@@ -1,66 +1,153 @@
 {% extends "base.html" %}
 {% block title %}Projects — dev-mem{% endblock %}
-{% block heading %}Projects{% endblock %}
+{% block heading %}Projects ({{ git_cards|length + local_cards|length }}){% endblock %}
 
-{% block content %}
-{% if cards %}
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-  {% for c in cards %}
-  <a href="{{ url_for('project_detail', name=c.name) }}"
-     class="block bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-indigo-500 transition-colors">
+{% block topbar_extra %}
+<a href="{{ url_for('projects') }}" class="text-xs text-slate-400 hover:text-slate-200">
+  <span class="bg-slate-700 px-2 py-1 rounded">
+    {{ git_cards|length }} git · {{ local_cards|length }} local
+  </span>
+</a>
+{% endblock %}
 
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-3">
-      <div class="flex items-center gap-2">
-        <span class="w-3 h-3 rounded-full flex-shrink-0" style="background: {{ c.color }}"></span>
-        <span class="font-semibold text-slate-100 truncate">{{ c.name }}</span>
-      </div>
-      <!-- Health score badge -->
-      <span class="score-badge
-        {% if c.health >= 75 %}score-green
-        {% elif c.health >= 50 %}score-yellow
-        {% elif c.health >= 25 %}score-orange
-        {% else %}score-red{% endif %}">
-        {{ c.health }}
-      </span>
-    </div>
+{# Obs type color map #}
+{% set TYPE_COLORS = {
+  'discovery': '#64748b',
+  'feature': '#22c55e',
+  'bugfix': '#ef4444',
+  'change': '#f59e0b',
+  'decision': '#a855f7',
+  'refactor': '#3b82f6'
+} %}
 
-    <!-- Stats grid -->
-    <div class="grid grid-cols-3 gap-2 text-center mb-4">
-      <div>
-        <p class="text-lg font-bold text-indigo-400">{{ c.total_hours }}</p>
-        <p class="text-xs text-slate-400">hrs tracked</p>
-      </div>
-      <div>
-        <p class="text-lg font-bold text-indigo-400">{{ c.commit_count }}</p>
-        <p class="text-xs text-slate-400">commits</p>
-      </div>
-      <div>
-        <p class="text-lg font-bold text-indigo-400">{{ c.health }}</p>
-        <p class="text-xs text-slate-400">health</p>
-      </div>
-    </div>
-
-    <!-- Health bar -->
-    <div class="health-bar-bg mb-3">
-      <div class="health-bar-fill" style="width: {{ c.health }}%; background: {{ c.color }}"></div>
-    </div>
-
-    <!-- Footer -->
-    <div class="flex justify-between text-xs text-slate-400">
-      <span>Last activity</span>
-      <span>{{ c.last_activity or 'never' }}</span>
-    </div>
-  </a>
+{% macro type_bar(types, total) %}
+{% if total > 0 %}
+<div class="flex h-1.5 rounded-full overflow-hidden gap-px">
+  {% for key, color in [('discovery','#64748b'),('feature','#22c55e'),('bugfix','#ef4444'),('change','#f59e0b'),('decision','#a855f7'),('refactor','#3b82f6')] %}
+    {% set n = types.get(key, 0) %}
+    {% if n > 0 %}
+    <div style="width: {{ (n / total * 100)|round(1) }}%; background: {{ color }}" title="{{ key }}: {{ n }}"></div>
+    {% endif %}
   {% endfor %}
 </div>
-{% else %}
+{% endif %}
+{% endmacro %}
+
+{% macro project_card(c) %}
+<a href="{{ url_for('project_detail', name=c.name) }}"
+   class="block bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-indigo-500 transition-colors">
+
+  {# Header: name + git badge #}
+  <div class="flex items-start justify-between mb-3">
+    <div class="flex items-center gap-2 min-w-0">
+      <span class="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-0.5" style="background: {{ c.color }}"></span>
+      <span class="font-semibold text-slate-100 truncate">{{ c.name }}</span>
+    </div>
+    {% if c.is_git %}
+    <span class="text-xs text-slate-500 flex-shrink-0 ml-2 flex items-center gap-1">
+      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M2.6 10.59L8.38 4.8l1.69 1.7c-.24.85.15 1.78.93 2.23v5.54c-.6.34-1 .99-1 1.73a2 2 0 002 2 2 2 0 002-2c0-.74-.4-1.39-1-1.73V9.41l2.07 2.09c-.07.15-.07.32-.07.5a2 2 0 002 2 2 2 0 002-2 2 2 0 00-2-2c-.18 0-.35 0-.5.07L13.93 7.5A2 2 0 0012 4.59a2 2 0 00-1.89 1.28L8.38 4.1 2.6 9.9l.01.01-.01.68z"/></svg>
+      git
+    </span>
+    {% endif %}
+  </div>
+
+  {# Stats row #}
+  <div class="grid grid-cols-3 gap-2 text-center mb-3">
+    <div>
+      <p class="text-base font-bold text-indigo-400">{{ c.obs_total }}</p>
+      <p class="text-xs text-slate-500">memories</p>
+    </div>
+    <div>
+      <p class="text-base font-bold text-slate-300">{{ c.active_days }}</p>
+      <p class="text-xs text-slate-500">active days</p>
+    </div>
+    <div>
+      <p class="text-base font-bold
+        {% if c.health >= 50 %}text-green-400
+        {% elif c.health >= 25 %}text-yellow-400
+        {% else %}text-slate-500{% endif %}">{{ c.health }}</p>
+      <p class="text-xs text-slate-500">health</p>
+    </div>
+  </div>
+
+  {# Obs type breakdown bar #}
+  {% if c.obs_total > 0 %}
+  {{ type_bar(c.obs_types, c.obs_total) }}
+  {# Type legend mini #}
+  <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 mb-2">
+    {% for key, color in [('discovery','#64748b'),('feature','#22c55e'),('bugfix','#ef4444'),('change','#f59e0b'),('decision','#a855f7'),('refactor','#3b82f6')] %}
+      {% if c.obs_types.get(key, 0) > 0 %}
+      <span class="text-xs" style="color: {{ color }}">{{ key[0] | upper }}{{ key[1:3] }} {{ c.obs_types[key] }}</span>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# Top concepts #}
+  {% if c.top_concepts %}
+  <div class="flex flex-wrap gap-1 mb-3">
+    {% for concept in c.top_concepts[:5] %}
+    <span class="text-xs bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded">{{ concept }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# Footer: path + date range #}
+  <div class="flex justify-between text-xs text-slate-600 mt-1">
+    <span class="truncate font-mono">{{ c.path.split('/')[-1] if '/' in c.path else c.path }}</span>
+    <span class="flex-shrink-0 ml-2">
+      {% if c.first_activity and c.last_activity and c.first_activity != c.last_activity %}
+        {{ c.first_activity }} → {{ c.last_activity }}
+      {% elif c.last_activity %}
+        {{ c.last_activity }}
+      {% else %}—{% endif %}
+    </span>
+  </div>
+</a>
+{% endmacro %}
+
+{% block content %}
+
+{% if not git_cards and not local_cards %}
 <div class="flex flex-col items-center justify-center py-24 text-slate-500">
   <svg class="w-12 h-12 mb-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
       d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
   </svg>
-  <p class="text-sm">No projects tracked yet.</p>
+  <p class="text-sm mb-3">No projects tracked yet.</p>
+  <code class="bg-slate-800 text-indigo-300 text-xs px-3 py-1.5 rounded">dev-mem project scan ~/Desktop/kraboo</code>
 </div>
 {% endif %}
+
+{% if git_cards %}
+<div class="mb-8">
+  <div class="flex items-center gap-2 mb-4">
+    <svg class="w-4 h-4 text-indigo-400" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M2.6 10.59L8.38 4.8l1.69 1.7c-.24.85.15 1.78.93 2.23v5.54c-.6.34-1 .99-1 1.73a2 2 0 002 2 2 2 0 002-2c0-.74-.4-1.39-1-1.73V9.41l2.07 2.09c-.07.15-.07.32-.07.5a2 2 0 002 2 2 2 0 002-2 2 2 0 00-2-2c-.18 0-.35 0-.5.07L13.93 7.5A2 2 0 0012 4.59a2 2 0 00-1.89 1.28L8.38 4.1 2.6 9.9l.01.01-.01.68z"/>
+    </svg>
+    <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wide">Git repos</h2>
+    <span class="text-xs text-slate-600">{{ git_cards|length }}</span>
+  </div>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for c in git_cards %}{{ project_card(c) }}{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if local_cards %}
+<div>
+  <div class="flex items-center gap-2 mb-4">
+    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+    </svg>
+    <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wide">Local folders</h2>
+    <span class="text-xs text-slate-600">{{ local_cards|length }}</span>
+  </div>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for c in local_cards %}{{ project_card(c) }}{% endfor %}
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}

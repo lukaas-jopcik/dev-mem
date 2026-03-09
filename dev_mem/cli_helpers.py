@@ -69,21 +69,24 @@ def _check_db(db_path: Path) -> tuple[bool, str]:
         return False, f"DB error: {exc}"
 
 
-def _check_git_hooks(projects: list[str]) -> tuple[bool, str]:
-    """Return (ok, detail) for git hooks in registered projects."""
-    if not projects:
-        return True, "No projects registered"
-    installed = 0
-    missing = []
-    for p in projects:
-        hook = Path(p) / ".git" / "hooks" / "post-commit"
-        if hook.exists() and "dev-mem" in hook.read_text(errors="ignore"):
-            installed += 1
-        else:
-            missing.append(Path(p).name)
-    if missing:
-        return False, f"Missing in: {', '.join(missing)}"
-    return True, f"Installed in {installed} project(s)"
+def _check_global_git_hook() -> tuple[bool, str]:
+    """Return (ok, detail) for the global git post-commit hook."""
+    import subprocess as _sp
+    hooks_dir = Path.home() / ".config" / "git" / "hooks"
+    hook = hooks_dir / "post-commit"
+    if not hook.exists() or "dev-mem" not in hook.read_text(errors="ignore"):
+        return False, f"Missing: {hook} (run: dev-mem install)"
+    try:
+        result = _sp.run(
+            ["git", "config", "--global", "core.hooksPath"],
+            capture_output=True, text=True, timeout=5,
+        )
+        configured = result.stdout.strip()
+        if configured:
+            return True, f"core.hooksPath → {configured}"
+        return False, "core.hooksPath not set (run: dev-mem install)"
+    except Exception:  # noqa: BLE001
+        return False, "Could not verify git config"
 
 
 def _check_cron() -> tuple[bool, str]:
@@ -128,13 +131,14 @@ def _check_claude_code() -> tuple[bool, str]:
 
 def run_doctor(db_path: Path, projects: list[str]) -> None:
     """Print a rich diagnostic report."""
-    checks = [
-        ("Shell hooks (zsh/bash precmd)", _check_shell_hooks()),
-        ("Database health", _check_db(db_path)),
-        ("Git hooks (per project)", _check_git_hooks(projects)),
-        ("Cron job", _check_cron()),
-        ("File watcher daemon", _check_file_watcher()),
-        ("Claude Code in PATH", _check_claude_code()),
+    # (label, (ok, detail), is_warning_only)
+    checks: list[tuple[str, tuple[bool, str], bool]] = [
+        ("Shell hooks (zsh/bash precmd)", _check_shell_hooks(), False),
+        ("Database health", _check_db(db_path), False),
+        ("Git hooks (global)", _check_global_git_hook(), False),
+        ("Cron job", _check_cron(), True),
+        ("File watcher daemon", _check_file_watcher(), True),
+        ("Claude Code in PATH", _check_claude_code(), True),
     ]
 
     table = Table(title="dev-mem Doctor", show_header=True, header_style="bold cyan")
@@ -142,20 +146,24 @@ def run_doctor(db_path: Path, projects: list[str]) -> None:
     table.add_column("Status", justify="center")
     table.add_column("Detail")
 
-    all_ok = True
-    for label, (ok, detail) in checks:
-        status = "[green]OK[/green]" if ok else "[red]FAIL[/red]"
-        if not ok:
-            all_ok = False
+    has_failure = False
+    for label, (ok, detail), warn_only in checks:
+        if ok:
+            status = "[green]OK[/green]"
+        elif warn_only:
+            status = "[yellow]WARN[/yellow]"
+        else:
+            status = "[red]FAIL[/red]"
+            has_failure = True
         table.add_row(label, status, detail)
 
     console.print(table)
-    if all_ok:
-        console.print(Panel("[green]All checks passed.[/green]", expand=False))
+    if not has_failure:
+        console.print(Panel("[green]All critical checks passed.[/green]", expand=False))
     else:
         console.print(
             Panel(
-                "[yellow]Some checks failed. Run [bold]dev-mem install[/bold] to fix most issues.[/yellow]",
+                "[red]Critical checks failed. Run [bold]dev-mem install[/bold] to fix.[/red]",
                 expand=False,
             )
         )

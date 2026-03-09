@@ -73,9 +73,10 @@ function preexec() { _DEV_MEM_CMD="$1"; _DEV_MEM_START=$SECONDS; }
 function precmd() {
   local exit_code=$?
   local duration=$(( (SECONDS - ${_DEV_MEM_START:-SECONDS}) * 1000 ))
-  [ -n "$_DEV_MEM_CMD" ] && python3 -m dev_mem.collectors.terminal --cmd "$_DEV_MEM_CMD" --duration $duration --exit-code $exit_code --cwd "$PWD" &
+  [ -n "$_DEV_MEM_CMD" ] && dev-mem collect terminal --cmd "$_DEV_MEM_CMD" --duration $duration --exit-code $exit_code --cwd "$PWD" &
   unset _DEV_MEM_CMD
 }
+function chpwd() { dev-mem project auto-register "$PWD" & }
 DEVMEM_ZSH
     else
         cat >> "$RC_FILE" << 'DEVMEM_BASH'
@@ -87,18 +88,42 @@ PROMPT_COMMAND='_dev_mem_prompt; '$PROMPT_COMMAND
 _dev_mem_prompt() {
   local exit_code=$?
   local duration=$(( (SECONDS - ${_DEV_MEM_START:-SECONDS}) * 1000 ))
-  [ -n "$_DEV_MEM_CMD" ] && python3 -m dev_mem.collectors.terminal --cmd "$_DEV_MEM_CMD" --duration $duration --exit-code $exit_code --cwd "$PWD" &
+  [ -n "$_DEV_MEM_CMD" ] && dev-mem collect terminal --cmd "$_DEV_MEM_CMD" --duration $duration --exit-code $exit_code --cwd "$PWD" &
   unset _DEV_MEM_CMD
 }
+cd() { builtin cd "$@" && dev-mem project auto-register "$PWD" &; }
 DEVMEM_BASH
     fi
     ok "Shell hooks appended to $RC_FILE"
 fi
 
 # ---------------------------------------------------------------------------
+# Install global git post-commit hook (all repos, no manual init needed)
+# ---------------------------------------------------------------------------
+GIT_HOOKS_DIR="$HOME/.config/git/hooks"
+mkdir -p "$GIT_HOOKS_DIR"
+
+GLOBAL_HOOK="$GIT_HOOKS_DIR/post-commit"
+if [[ -f "$GLOBAL_HOOK" ]] && grep -qF "dev-mem" "$GLOBAL_HOOK" 2>/dev/null; then
+    ok "Global git post-commit hook already installed — skipping"
+else
+    cat > "$GLOBAL_HOOK" << 'DEVMEM_GIT_HOOK'
+#!/usr/bin/env bash
+# dev-mem global post-commit hook
+dev-mem collect git-commit &
+DEVMEM_GIT_HOOK
+    chmod +x "$GLOBAL_HOOK"
+    ok "Global git post-commit hook installed: $GLOBAL_HOOK"
+fi
+
+git config --global core.hooksPath "$GIT_HOOKS_DIR" && \
+    ok "git config --global core.hooksPath set to $GIT_HOOKS_DIR" || \
+    warn "Could not set git global hooksPath — run manually: git config --global core.hooksPath $GIT_HOOKS_DIR"
+
+# ---------------------------------------------------------------------------
 # Install cron job for daily summary (idempotent)
 # ---------------------------------------------------------------------------
-CRON_JOB="0 20 * * * python3 -m dev_mem.analyzer.daily_summary"
+CRON_JOB="0 20 * * * dev-mem analyze today"
 CRON_MARKER="dev_mem.analyzer.daily_summary"
 
 if crontab -l 2>/dev/null | grep -qF "$CRON_MARKER"; then

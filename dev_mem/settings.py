@@ -45,6 +45,14 @@ DEFAULTS: dict[str, Any] = {
         "file_events": 60,
         "claude_sessions": 90,
     },
+    # Memory / observations subsystem
+    "observations_enabled": True,
+    "observations_min_output_chars": 100,
+    "observations_obs_tools": ["Read", "Write", "Edit", "Bash", "MultiEdit"],
+    "context_inject_max_observations": 10,
+    "context_inject_max_chars": 8000,
+    "session_summary_enabled": True,
+    "mcp_server_db_path": None,
 }
 
 

@@ -1,25 +1,34 @@
 {% extends "base.html" %}
 {% block title %}Daily {{ date }} — dev-mem{% endblock %}
-{% block heading %}Daily Archive — {{ date }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb">
+  <span class="text-sm font-semibold text-slate-200">Daily</span>
+  <span class="breadcrumb-sep">/</span>
+  <span class="text-slate-400 text-sm">{{ date }}</span>
+</nav>
+{% endblock %}
+
+{% block topbar_extra %}
+<form class="flex items-center gap-2">
+  <input type="date" name="date" value="{{ date }}"
+         class="input-sm"
+         onchange="window.location='/daily/'+this.value" />
+  <a href="/daily/{{ prev_date }}" class="text-xs text-slate-500 hover:text-slate-300 px-1">←</a>
+  <a href="/daily/{{ next_date }}" class="text-xs text-slate-500 hover:text-slate-300 px-1">→</a>
+</form>
+{% endblock %}
 
 {% block content %}
 
-<!-- Date picker -->
-<form method="get" class="mb-6 flex items-center gap-3">
-  <input type="date" name="date" id="datePicker" value="{{ date }}"
-         class="bg-slate-700 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200"
-         onchange="window.location='/daily/'+this.value" />
-  <span class="text-slate-500 text-sm">Pick a date to view its summary</span>
-</form>
-
 {% if summaries %}
   {% for s in summaries %}
-  <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 mb-5">
+  <div class="card mb-5">
     {% if s.project_name %}
-    <div class="flex items-center gap-2 mb-4">
+    <div class="flex items-center gap-2 mb-4 pb-3 border-b border-slate-700">
       <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
       <h2 class="text-sm font-semibold text-indigo-300">{{ s.project_name }}</h2>
-      <span class="text-xs text-slate-500 ml-auto">Generated {{ s.generated_at[:16] }}</span>
+      <span class="text-xs text-slate-500 ml-auto">{{ s.generated_at[:16] }}</span>
     </div>
     {% endif %}
     <div class="prose-daily">
@@ -27,32 +36,71 @@
     </div>
   </div>
   {% endfor %}
+
+{% elif obs_by_project %}
+  <!-- Fallback: raw observations for the day -->
+  <div class="mb-4 flex items-center gap-2 text-xs text-slate-500">
+    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    No generated summary — showing raw activity for {{ date }}
+  </div>
+
+  {% for group in obs_by_project %}
+  <div class="card mb-4">
+    <div class="flex items-center gap-2 mb-3 pb-2 border-b border-slate-700">
+      <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+      <h2 class="text-sm font-semibold text-slate-300">{{ group.project }}</h2>
+      <span class="text-xs text-slate-600 ml-auto">{{ group.obs|length }} entries</span>
+    </div>
+    <ul class="space-y-2">
+      {% for o in group.obs[:20] %}
+      <li class="flex items-start gap-2.5">
+        <span class="obs-badge obs-{{ o.type or 'discovery' }} mt-0.5 flex-shrink-0">
+          {{ (o.type or 'disc')[:4] }}
+        </span>
+        <div class="min-w-0">
+          <p class="text-sm text-slate-200 leading-snug">{{ o.title }}</p>
+          {% if o.narrative and not o.narrative.startswith('{') %}
+          <p class="text-xs text-slate-500 line-clamp-2 mt-0.5">{{ o.narrative[:120] }}</p>
+          {% endif %}
+        </div>
+      </li>
+      {% endfor %}
+      {% if group.obs|length > 20 %}
+      <li class="text-xs text-slate-600 pt-1">+ {{ group.obs|length - 20 }} more entries</li>
+      {% endif %}
+    </ul>
+  </div>
+  {% endfor %}
+
 {% else %}
-<div class="flex flex-col items-center py-24 text-slate-500">
-  <svg class="w-10 h-10 text-slate-700 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<div class="empty-state">
+  <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
       d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
   </svg>
-  <p class="text-sm">No daily summary for {{ date }}.</p>
-  <p class="text-xs mt-1 text-slate-600">Summaries are generated automatically each evening.</p>
+  <p>No activity recorded for {{ date }}.</p>
+  <p class="text-xs mt-1 text-slate-600">Daily summaries are generated automatically each evening.</p>
 </div>
 {% endif %}
 
 <style>
-.prose-daily { color: #cbd5e1; line-height: 1.7; font-size: 0.9rem; }
+.prose-daily { color: #cbd5e1; line-height: 1.7; font-size: 0.875rem; }
 .prose-daily h1,.prose-daily h2,.prose-daily h3 { color: #e2e8f0; font-weight: 600; margin: 1rem 0 0.5rem; }
-.prose-daily h1 { font-size: 1.25rem; }
-.prose-daily h2 { font-size: 1.1rem; }
-.prose-daily h3 { font-size: 1rem; }
-.prose-daily ul,.prose-daily ol { padding-left: 1.5rem; margin: 0.5rem 0; }
-.prose-daily li { margin: 0.25rem 0; }
-.prose-daily code { background:#1e293b; padding:0.1rem 0.35rem; border-radius:4px; font-size:0.8rem; color:#a5b4fc; }
-.prose-daily pre { background:#1e293b; padding:1rem; border-radius:8px; overflow-x:auto; margin:0.75rem 0; }
+.prose-daily h1 { font-size: 1.15rem; }
+.prose-daily h2 { font-size: 1rem; }
+.prose-daily h3 { font-size: 0.9rem; color: #94a3b8; }
+.prose-daily ul,.prose-daily ol { padding-left: 1.25rem; margin: 0.4rem 0; }
+.prose-daily li { margin: 0.2rem 0; }
+.prose-daily code { background:#0f172a; padding:0.1rem 0.35rem; border-radius:4px; font-size:0.8rem; color:#a5b4fc; }
+.prose-daily pre { background:#0f172a; padding:0.75rem; border-radius:8px; overflow-x:auto; margin:0.5rem 0; }
 .prose-daily pre code { background:transparent; padding:0; }
 .prose-daily strong { color:#e2e8f0; }
 .prose-daily a { color:#818cf8; text-decoration:underline; }
-.prose-daily blockquote { border-left:3px solid #4f46e5; padding-left:1rem; color:#94a3b8; font-style:italic; }
-.prose-daily p { margin:0.5rem 0; }
+.prose-daily blockquote { border-left:2px solid #4f46e5; padding-left:0.75rem; color:#94a3b8; font-style:italic; }
+.prose-daily p { margin:0.4rem 0; }
 .prose-daily hr { border-color:#334155; margin:1rem 0; }
 </style>
 {% endblock %}

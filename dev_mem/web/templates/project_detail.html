@@ -2,114 +2,187 @@
 {% block title %}{{ project.name }} — dev-mem{% endblock %}
 {% block heading %}{{ project.name }}{% endblock %}
 
+{% block breadcrumb %}
+<nav class="breadcrumb">
+  <a href="{{ url_for('projects') }}" class="breadcrumb-back">
+    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+    </svg>
+    Projects
+  </a>
+  <span class="breadcrumb-sep">/</span>
+  <span class="text-slate-200 font-medium text-sm">{{ project.name }}</span>
+</nav>
+{% endblock %}
+
 {% block topbar_extra %}
-<span class="inline-block px-2 py-0.5 rounded text-xs font-medium"
-      style="background: {{ project.color }}22; color: {{ project.color }}; border: 1px solid {{ project.color }}44">
-  {{ project.name }}
+<span class="inline-block px-2 py-0.5 rounded text-xs"
+      style="background: {{ project.color }}22; color: {{ project.color }}; border: 1px solid {{ project.color }}33">
+  {% if project.is_git %}git{% else %}local{% endif %}
 </span>
 {% endblock %}
 
 {% block content %}
 
 <!-- Stats row -->
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
   <div class="stat-card">
-    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Commands today</p>
-    <p class="text-3xl font-bold text-indigo-400">{{ stats.commands }}</p>
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Memories</p>
+    <p class="text-2xl font-bold text-indigo-400">{{ obs_stats.total }}</p>
   </div>
   <div class="stat-card">
-    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Commits today</p>
-    <p class="text-3xl font-bold text-indigo-400">{{ stats.git_events }}</p>
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Active days</p>
+    <p class="text-2xl font-bold text-slate-300">{{ obs_stats.active_days }}</p>
   </div>
   <div class="stat-card">
-    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Errors</p>
-    <p class="text-3xl font-bold text-red-400">{{ errors | length }}</p>
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Features</p>
+    <p class="text-2xl font-bold text-green-400">{{ obs_stats.types.get('feature', 0) }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Bugfixes</p>
+    <p class="text-2xl font-bold text-red-400">{{ obs_stats.types.get('bugfix', 0) }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Decisions</p>
+    <p class="text-2xl font-bold text-purple-400">{{ obs_stats.types.get('decision', 0) }}</p>
   </div>
   <div class="stat-card">
     <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Health</p>
-    <p class="text-3xl font-bold
-      {% if health >= 75 %}text-green-400
-      {% elif health >= 50 %}text-yellow-400
-      {% elif health >= 25 %}text-orange-400
-      {% else %}text-red-400{% endif %}">{{ health }}</p>
+    <p class="text-2xl font-bold
+      {% if health >= 50 %}text-green-400
+      {% elif health >= 25 %}text-yellow-400
+      {% else %}text-slate-500{% endif %}">{{ health }}</p>
   </div>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<!-- Obs type breakdown bar -->
+{% if obs_stats.total > 0 %}
+<div class="bg-slate-800 border border-slate-700 rounded-xl p-4 mb-6">
+  <div class="flex items-center justify-between mb-2">
+    <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Memory breakdown</h2>
+    <span class="text-xs text-slate-500">{{ obs_stats.first_activity }} → {{ obs_stats.last_activity }}</span>
+  </div>
+  <div class="flex h-2 rounded-full overflow-hidden gap-px mb-3">
+    {% for key, color in [('discovery','#64748b'),('feature','#22c55e'),('bugfix','#ef4444'),('change','#f59e0b'),('decision','#a855f7'),('refactor','#3b82f6')] %}
+      {% set n = obs_stats.types.get(key, 0) %}
+      {% if n > 0 %}
+      <div style="width: {{ (n / obs_stats.total * 100)|round(1) }}%; background: {{ color }}" title="{{ key }}: {{ n }}"></div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  <div class="flex flex-wrap gap-3 text-xs">
+    {% for key, color in [('discovery','#64748b'),('feature','#22c55e'),('bugfix','#ef4444'),('change','#f59e0b'),('decision','#a855f7'),('refactor','#3b82f6')] %}
+      {% set n = obs_stats.types.get(key, 0) %}
+      {% if n > 0 %}
+      <span style="color: {{ color }}">{{ key }} <span class="text-slate-400">{{ n }}</span>
+        <span class="text-slate-600">({{ (n / obs_stats.total * 100)|round }}%)</span>
+      </span>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% if obs_stats.top_concepts %}
+  <div class="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-slate-700">
+    {% for c in obs_stats.top_concepts %}
+    <span class="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full">{{ c }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
 
-  <!-- Recent commits -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+  <!-- Recent observations -->
   <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
-    <h2 class="text-sm font-semibold text-slate-300 mb-4">Recent Commits</h2>
-    {% if commits %}
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Hash</th>
-          <th>Message</th>
-          <th>+/-</th>
-          <th>Date</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for c in commits %}
-        <tr>
-          <td class="font-mono text-indigo-400">{{ c.hash[:7] }}</td>
-          <td class="max-w-xs">{{ c.message[:50] }}{% if c.message|length > 50 %}…{% endif %}</td>
-          <td class="text-xs">
-            <span class="text-green-400">+{{ c.insertions }}</span>
-            <span class="text-red-400 ml-1">-{{ c.deletions }}</span>
-          </td>
-          <td class="text-slate-400 text-xs">{{ c.ts[:10] }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <h2 class="text-sm font-semibold text-slate-300 mb-4">Recent Memories</h2>
+    {% if recent_obs %}
+    <ul class="space-y-2">
+      {% for o in recent_obs %}
+      {% set TYPE_COLORS = {
+        'bugfix': 'bg-red-900 text-red-300',
+        'feature': 'bg-green-900 text-green-300',
+        'refactor': 'bg-blue-900 text-blue-300',
+        'decision': 'bg-purple-900 text-purple-300',
+        'change': 'bg-yellow-900 text-yellow-300',
+      } %}
+      <li class="flex items-start gap-2">
+        <span class="text-xs px-1.5 py-0.5 rounded flex-shrink-0 mt-0.5 {{ TYPE_COLORS.get(o.type, 'bg-slate-700 text-slate-400') }}">
+          {{ (o.type or 'disc')[:4] }}
+        </span>
+        <div class="min-w-0">
+          <p class="text-xs text-slate-200 truncate">{{ o.title }}</p>
+          {% if o.narrative and o.narrative | length > 5 and not o.narrative.startswith('{') %}
+          <p class="text-xs text-slate-500 line-clamp-1">{{ o.narrative[:80] }}</p>
+          {% endif %}
+          <p class="text-xs text-slate-600">{{ o.created_at[:10] }}</p>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
     {% else %}
-    <p class="text-slate-500 text-sm">No commits yet.</p>
+    <p class="text-slate-500 text-sm">No observations yet.</p>
     {% endif %}
   </div>
 
-  <!-- Right: errors + learnings -->
+  <!-- Right column -->
   <div class="space-y-5">
 
+    <!-- Errors -->
+    {% if errors %}
     <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
       <h2 class="text-sm font-semibold text-slate-300 mb-3">Top Errors</h2>
-      {% if errors %}
       <ul class="space-y-2">
         {% for e in errors %}
         <li class="flex items-start gap-2 text-xs">
           <span class="freq-badge {% if e.count >= 10 %}high{% endif %} flex-shrink-0">{{ e.count }}x</span>
-          <span class="font-mono text-red-300 break-all">
-            {{ e.error_text[:80] }}{% if e.error_text|length > 80 %}…{% endif %}
-          </span>
+          <span class="font-mono text-red-300 break-all">{{ e.error_text[:80] }}{% if e.error_text|length > 80 %}…{% endif %}</span>
         </li>
         {% endfor %}
       </ul>
-      {% else %}
-      <p class="text-slate-500 text-sm">No errors recorded.</p>
-      {% endif %}
     </div>
+    {% endif %}
 
+    <!-- Session summaries -->
+    {% if session_sums %}
     <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 mb-3">Recent Learnings</h2>
-      {% if learnings %}
+      <h2 class="text-sm font-semibold text-slate-300 mb-3">Session Log</h2>
       <ul class="space-y-3">
-        {% for l in learnings %}
-        <li class="text-xs">
-          {% set t = l.type | lower %}
-          <span class="score-badge type-{{ t if t in ['insight','mistake','tip','reference'] else 'default' }}">
-            {{ l.type or 'note' }}
-          </span>
-          <p class="mt-1 text-slate-300">{{ l.text[:100] }}{% if l.text|length > 100 %}…{% endif %}</p>
+        {% for s in session_sums %}
+        <li class="text-xs border-l-2 border-slate-600 pl-3">
+          <p class="text-slate-500 mb-0.5">{{ s.created_at[:16] }}</p>
+          {% if s.completed %}
+          <p class="text-slate-300">{{ s.completed[:120] }}{% if s.completed|length > 120 %}…{% endif %}</p>
+          {% elif s.request %}
+          <p class="text-slate-400 italic">{{ s.request[:100] }}{% if s.request|length > 100 %}…{% endif %}</p>
+          {% endif %}
+          {% if s.files_edited %}
+          <p class="text-slate-600 mt-0.5 font-mono">{{ s.files_edited.split('\n')[0] }}</p>
+          {% endif %}
         </li>
         {% endfor %}
       </ul>
-      {% else %}
-      <p class="text-slate-500 text-sm">No learnings yet.</p>
-      {% endif %}
     </div>
+    {% endif %}
+
+    <!-- Commits -->
+    {% if commits %}
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-slate-300 mb-3">Recent Commits</h2>
+      <table class="data-table">
+        <tbody>
+          {% for c in commits %}
+          <tr>
+            <td class="font-mono text-indigo-400 text-xs">{{ c.hash[:7] }}</td>
+            <td class="text-xs">{{ c.message[:50] }}{% if c.message|length > 50 %}…{% endif %}</td>
+            <td class="text-xs text-slate-400">{{ c.ts[:10] }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
 
   </div>
-
 </div>
+
 {% endblock %}

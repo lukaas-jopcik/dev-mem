@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Team — dev-mem{% endblock %}
+{% block breadcrumb %}
+<h1 class="text-sm font-semibold text-slate-200">Team Activity</h1>
+{% endblock %}
+
+{% block content %}
+
+<!-- Today stats -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+  <div class="stat-card">
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Memories today</p>
+    <p class="text-3xl font-bold text-indigo-400">{{ today_obs }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">This week</p>
+    <p class="text-3xl font-bold text-slate-300">{{ week_obs }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Projects today</p>
+    <p class="text-3xl font-bold text-slate-300">{{ today_projects | length }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Sessions logged</p>
+    <p class="text-3xl font-bold text-slate-300">{{ cc_sessions | length }}</p>
+  </div>
+</div>
+
+<!-- Active projects today -->
+{% if today_projects %}
+<div class="bg-slate-800 border border-slate-700 rounded-xl p-4 mb-6">
+  <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Active today</h2>
+  <div class="flex flex-wrap gap-2">
+    {% for p in today_projects %}
+    <a href="{{ url_for('project_detail', name=p) }}"
+       class="text-xs bg-indigo-900 text-indigo-300 px-2.5 py-1 rounded-full hover:bg-indigo-800 transition-colors">
+      {{ p }}
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+  <!-- Session log -->
+  <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
+    <h2 class="text-sm font-semibold text-slate-300 mb-4">Session Log</h2>
+    {% if session_summaries %}
+    <ul class="space-y-4">
+      {% for s in session_summaries %}
+      <li class="border-l-2 border-slate-600 pl-3 text-xs">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-slate-500">{{ s.created_at[:16] }}</span>
+          {% if s.project_name %}
+          <a href="{{ url_for('project_detail', name=s.project_name) }}"
+             class="text-indigo-400 hover:text-indigo-300">{{ s.project_name }}</a>
+          {% endif %}
+        </div>
+        {% if s.completed %}
+        <p class="text-slate-200 mb-0.5">{{ s.completed[:150] }}{% if s.completed|length > 150 %}…{% endif %}</p>
+        {% elif s.request %}
+        <p class="text-slate-400 italic">{{ s.request[:120] }}{% if s.request|length > 120 %}…{% endif %}</p>
+        {% endif %}
+        {% if s.files_edited %}
+        <div class="mt-1 space-y-0.5">
+          {% for f in s.files_edited.split('\n')[:3] %}
+          {% if f.strip() %}
+          <p class="font-mono text-slate-600 truncate">{{ f.strip().split('/')[-1] }}</p>
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-slate-500 text-sm">No sessions logged yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Right column -->
+  <div class="space-y-5">
+
+    <!-- Claude Code sessions -->
+    {% if cc_sessions %}
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-slate-300 mb-4">Claude Sessions</h2>
+      <ul class="space-y-2">
+        {% for s in cc_sessions %}
+        <li class="flex items-center justify-between text-xs py-1.5 border-b border-slate-700 last:border-0">
+          <div class="min-w-0">
+            <p class="text-slate-200">
+              {% if s.project_name %}
+              <a href="{{ url_for('project_detail', name=s.project_name) }}" class="text-indigo-400 hover:underline">
+                {{ s.project_name }}
+              </a>
+              {% else %}
+              <span class="text-slate-500 italic">{{ s.cwd.split('/')[-1] if s.cwd else 'unknown' }}</span>
+              {% endif %}
+            </p>
+            <p class="text-slate-500">{{ s.started_at[:16] }}</p>
+          </div>
+          <div class="flex gap-3 flex-shrink-0 text-right">
+            <span class="text-slate-400">{{ s.tool_call_count }} calls</span>
+            <span class="text-indigo-400">{{ s.observation_count }} mem</span>
+            <span class="px-1.5 py-0.5 rounded text-xs
+              {% if s.status == 'active' %}bg-green-900 text-green-300
+              {% else %}bg-slate-700 text-slate-400{% endif %}">
+              {{ s.status }}
+            </span>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <!-- Tool usage -->
+    {% if tool_stats %}
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-slate-300 mb-4">Tool Usage</h2>
+      {% set max_count = tool_stats[0].n %}
+      <ul class="space-y-2">
+        {% for t in tool_stats %}
+        <li class="text-xs">
+          <div class="flex justify-between mb-0.5">
+            <span class="text-slate-300 font-mono">{{ t.tool or 'unknown' }}</span>
+            <span class="text-slate-500">{{ t.n }}</span>
+          </div>
+          <div class="h-1 bg-slate-700 rounded-full">
+            <div class="h-1 bg-indigo-500 rounded-full" style="width: {{ (t.n / max_count * 100)|round }}%"></div>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{% endblock %}
