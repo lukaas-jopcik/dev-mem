@@ -1,0 +1,127 @@
+/* dev-mem custom styles — Tailwind does heavy lifting */
+
+/* Sidebar nav links */
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  color: #94a3b8; /* slate-400 */
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+.nav-link:hover {
+  background: #1e293b; /* slate-800 */
+  color: #e2e8f0; /* slate-200 */
+}
+.nav-link.active {
+  background: #312e81; /* indigo-900 */
+  color: #a5b4fc; /* indigo-300 */
+}
+
+/* Score badges */
+.score-badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.score-green  { background: #14532d; color: #86efac; }
+.score-yellow { background: #713f12; color: #fde68a; }
+.score-orange { background: #7c2d12; color: #fdba74; }
+.score-red    { background: #450a0a; color: #fca5a5; }
+
+/* Frequency badge */
+.freq-badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #1e3a5f;
+  color: #93c5fd;
+}
+.freq-badge.high { background: #450a0a; color: #fca5a5; }
+
+/* Learning type badges */
+.type-insight   { background: #1e3a5f; color: #93c5fd; }
+.type-mistake   { background: #450a0a; color: #fca5a5; }
+.type-tip       { background: #14532d; color: #86efac; }
+.type-reference { background: #2e1065; color: #c4b5fd; }
+.type-default   { background: #1e293b; color: #94a3b8; }
+
+/* Command heatmap grid */
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: 3rem repeat(7, 1fr);
+  gap: 2px;
+}
+.heatmap-cell {
+  height: 20px;
+  border-radius: 3px;
+  background: #1e293b;
+}
+.heatmap-cell[data-level="0"] { background: #1e293b; }
+.heatmap-cell[data-level="1"] { background: #1e3a5f; }
+.heatmap-cell[data-level="2"] { background: #1d4ed8; }
+.heatmap-cell[data-level="3"] { background: #4f46e5; }
+.heatmap-cell[data-level="4"] { background: #818cf8; }
+.heatmap-label {
+  font-size: 0.65rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 4px;
+}
+
+/* Stat card */
+.stat-card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+}
+
+/* Table styles */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.data-table th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  color: #64748b;
+  font-weight: 500;
+  border-bottom: 1px solid #334155;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+}
+.data-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid #1e293b;
+  color: #cbd5e1;
+  vertical-align: top;
+}
+.data-table tr:hover td {
+  background: #1e293b;
+}
+
+/* Health bar */
+.health-bar-bg {
+  background: #334155;
+  border-radius: 9999px;
+  height: 6px;
+  overflow: hidden;
+}
+.health-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: #6366f1;
+  transition: width 0.3s;
+}

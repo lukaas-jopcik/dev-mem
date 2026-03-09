@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Errors — dev-mem{% endblock %}
+{% block heading %}Error Patterns{% endblock %}
+
+{% block content %}
+<div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+  {% if errors %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Error</th>
+        <th>Count</th>
+        <th>Project</th>
+        <th>First seen</th>
+        <th>Last seen</th>
+        <th>Freq</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in errors %}
+      {% set days_span = ((e.last_seen[:10] | string) > (e.first_seen[:10] | string)) | int + 1 %}
+      <tr>
+        <td class="max-w-sm">
+          <span class="font-mono text-xs text-red-300"
+                title="{{ e.error_text }}">
+            {{ e.error_text[:100] }}{% if e.error_text|length > 100 %}…{% endif %}
+          </span>
+        </td>
+        <td>
+          <span class="text-white font-bold">{{ e.count }}</span>
+        </td>
+        <td>
+          {% if e.project_name %}
+          <span class="text-xs bg-slate-700 rounded px-2 py-0.5">{{ e.project_name }}</span>
+          {% else %}—{% endif %}
+        </td>
+        <td class="text-slate-400 text-xs whitespace-nowrap">{{ e.first_seen[:10] }}</td>
+        <td class="text-slate-400 text-xs whitespace-nowrap">{{ e.last_seen[:10] }}</td>
+        <td>
+          <span class="freq-badge {% if e.count >= 10 %}high{% endif %}">
+            {% if e.count >= 10 %}high
+            {% elif e.count >= 5 %}med
+            {% else %}low{% endif %}
+          </span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="p-12 text-center">
+    <svg class="w-10 h-10 text-slate-700 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <p class="text-slate-500 text-sm">No error patterns recorded.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

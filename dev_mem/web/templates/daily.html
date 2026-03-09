@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Daily {{ date }} — dev-mem{% endblock %}
+{% block heading %}Daily Archive — {{ date }}{% endblock %}
+
+{% block content %}
+
+<!-- Date picker -->
+<form method="get" class="mb-6 flex items-center gap-3">
+  <input type="date" name="date" id="datePicker" value="{{ date }}"
+         class="bg-slate-700 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200"
+         onchange="window.location='/daily/'+this.value" />
+  <span class="text-slate-500 text-sm">Pick a date to view its summary</span>
+</form>
+
+{% if summaries %}
+  {% for s in summaries %}
+  <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 mb-5">
+    {% if s.project_name %}
+    <div class="flex items-center gap-2 mb-4">
+      <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+      <h2 class="text-sm font-semibold text-indigo-300">{{ s.project_name }}</h2>
+      <span class="text-xs text-slate-500 ml-auto">Generated {{ s.generated_at[:16] }}</span>
+    </div>
+    {% endif %}
+    <div class="prose-daily">
+      {{ s.md_content | safe_md }}
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+<div class="flex flex-col items-center py-24 text-slate-500">
+  <svg class="w-10 h-10 text-slate-700 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+  </svg>
+  <p class="text-sm">No daily summary for {{ date }}.</p>
+  <p class="text-xs mt-1 text-slate-600">Summaries are generated automatically each evening.</p>
+</div>
+{% endif %}
+
+<style>
+.prose-daily { color: #cbd5e1; line-height: 1.7; font-size: 0.9rem; }
+.prose-daily h1,.prose-daily h2,.prose-daily h3 { color: #e2e8f0; font-weight: 600; margin: 1rem 0 0.5rem; }
+.prose-daily h1 { font-size: 1.25rem; }
+.prose-daily h2 { font-size: 1.1rem; }
+.prose-daily h3 { font-size: 1rem; }
+.prose-daily ul,.prose-daily ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+.prose-daily li { margin: 0.25rem 0; }
+.prose-daily code { background:#1e293b; padding:0.1rem 0.35rem; border-radius:4px; font-size:0.8rem; color:#a5b4fc; }
+.prose-daily pre { background:#1e293b; padding:1rem; border-radius:8px; overflow-x:auto; margin:0.75rem 0; }
+.prose-daily pre code { background:transparent; padding:0; }
+.prose-daily strong { color:#e2e8f0; }
+.prose-daily a { color:#818cf8; text-decoration:underline; }
+.prose-daily blockquote { border-left:3px solid #4f46e5; padding-left:1rem; color:#94a3b8; font-style:italic; }
+.prose-daily p { margin:0.5rem 0; }
+.prose-daily hr { border-color:#334155; margin:1rem 0; }
+</style>
+{% endblock %}

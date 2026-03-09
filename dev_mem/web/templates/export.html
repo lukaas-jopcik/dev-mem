@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Export — dev-mem{% endblock %}
+{% block heading %}Export Data{% endblock %}
+
+{% block content %}
+<div class="max-w-xl">
+  <div class="bg-slate-800 border border-slate-700 rounded-xl p-6">
+    <h2 class="text-sm font-semibold text-slate-300 mb-5">Download data as CSV or JSON</h2>
+
+    <form method="post" action="{{ url_for('export_download') }}" class="space-y-4">
+
+      <div>
+        <label class="block text-xs text-slate-400 mb-1">Table</label>
+        <select name="table"
+                class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200">
+          <option value="commands">Commands</option>
+          <option value="git_events">Git Events</option>
+          <option value="errors">Errors</option>
+          <option value="prompts">Prompts</option>
+          <option value="learnings">Learnings</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs text-slate-400 mb-1">Project (optional)</label>
+        <select name="project"
+                class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200">
+          <option value="">All projects</option>
+          {% for p in projects %}
+          <option value="{{ p.name }}">{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">From date</label>
+          <input type="date" name="date_from"
+                 class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200" />
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">To date</label>
+          <input type="date" name="date_to" value="{{ today }}"
+                 class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200" />
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs text-slate-400 mb-2">Format</label>
+        <div class="flex gap-4">
+          <label class="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+            <input type="radio" name="format" value="json" checked
+                   class="accent-indigo-500" />
+            JSON
+          </label>
+          <label class="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+            <input type="radio" name="format" value="csv"
+                   class="accent-indigo-500" />
+            CSV
+          </label>
+        </div>
+      </div>
+
+      <div class="pt-2">
+        <button type="submit"
+                class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          Download
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <p class="text-xs text-slate-500 mt-4">
+    Max 5,000 rows per export. Rows are ordered newest first.
+  </p>
+</div>
+{% endblock %}

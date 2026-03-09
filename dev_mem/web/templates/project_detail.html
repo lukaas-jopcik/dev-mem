@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} — dev-mem{% endblock %}
+{% block heading %}{{ project.name }}{% endblock %}
+
+{% block topbar_extra %}
+<span class="inline-block px-2 py-0.5 rounded text-xs font-medium"
+      style="background: {{ project.color }}22; color: {{ project.color }}; border: 1px solid {{ project.color }}44">
+  {{ project.name }}
+</span>
+{% endblock %}
+
+{% block content %}
+
+<!-- Stats row -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+  <div class="stat-card">
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Commands today</p>
+    <p class="text-3xl font-bold text-indigo-400">{{ stats.commands }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Commits today</p>
+    <p class="text-3xl font-bold text-indigo-400">{{ stats.git_events }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Errors</p>
+    <p class="text-3xl font-bold text-red-400">{{ errors | length }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Health</p>
+    <p class="text-3xl font-bold
+      {% if health >= 75 %}text-green-400
+      {% elif health >= 50 %}text-yellow-400
+      {% elif health >= 25 %}text-orange-400
+      {% else %}text-red-400{% endif %}">{{ health }}</p>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+  <!-- Recent commits -->
+  <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
+    <h2 class="text-sm font-semibold text-slate-300 mb-4">Recent Commits</h2>
+    {% if commits %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Hash</th>
+          <th>Message</th>
+          <th>+/-</th>
+          <th>Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in commits %}
+        <tr>
+          <td class="font-mono text-indigo-400">{{ c.hash[:7] }}</td>
+          <td class="max-w-xs">{{ c.message[:50] }}{% if c.message|length > 50 %}…{% endif %}</td>
+          <td class="text-xs">
+            <span class="text-green-400">+{{ c.insertions }}</span>
+            <span class="text-red-400 ml-1">-{{ c.deletions }}</span>
+          </td>
+          <td class="text-slate-400 text-xs">{{ c.ts[:10] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-slate-500 text-sm">No commits yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Right: errors + learnings -->
+  <div class="space-y-5">
+
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-slate-300 mb-3">Top Errors</h2>
+      {% if errors %}
+      <ul class="space-y-2">
+        {% for e in errors %}
+        <li class="flex items-start gap-2 text-xs">
+          <span class="freq-badge {% if e.count >= 10 %}high{% endif %} flex-shrink-0">{{ e.count }}x</span>
+          <span class="font-mono text-red-300 break-all">
+            {{ e.error_text[:80] }}{% if e.error_text|length > 80 %}…{% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-slate-500 text-sm">No errors recorded.</p>
+      {% endif %}
+    </div>
+
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-slate-300 mb-3">Recent Learnings</h2>
+      {% if learnings %}
+      <ul class="space-y-3">
+        {% for l in learnings %}
+        <li class="text-xs">
+          {% set t = l.type | lower %}
+          <span class="score-badge type-{{ t if t in ['insight','mistake','tip','reference'] else 'default' }}">
+            {{ l.type or 'note' }}
+          </span>
+          <p class="mt-1 text-slate-300">{{ l.text[:100] }}{% if l.text|length > 100 %}…{% endif %}</p>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-slate-500 text-sm">No learnings yet.</p>
+      {% endif %}
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "dev-mem"
+version = "0.1.0"
+description = "Local developer memory system — automatically tracks work, analyzes patterns, surfaces daily insights"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [{name = "dev-mem contributors"}]
+keywords = ["developer-tools", "productivity", "memory", "cli"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Utilities",
+]
+dependencies = [
+  "click>=8.0",
+  "flask>=3.0",
+  "watchdog>=4.0",
+  "gitpython>=3.1",
+  "tzlocal>=5.0",
+  "rich>=13.0",
+]
+
+[project.scripts]
+dev-mem = "dev_mem.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-cov", "black", "ruff", "mypy"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["dev_mem*"]
+
+[tool.setuptools.package-data]
+dev_mem = ["hooks/*", "web/templates/*", "web/static/*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+ignore_missing_imports = true

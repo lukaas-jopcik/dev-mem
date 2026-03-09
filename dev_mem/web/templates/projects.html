@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Projects — dev-mem{% endblock %}
+{% block heading %}Projects{% endblock %}
+
+{% block content %}
+{% if cards %}
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+  {% for c in cards %}
+  <a href="{{ url_for('project_detail', name=c.name) }}"
+     class="block bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-indigo-500 transition-colors">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-3">
+      <div class="flex items-center gap-2">
+        <span class="w-3 h-3 rounded-full flex-shrink-0" style="background: {{ c.color }}"></span>
+        <span class="font-semibold text-slate-100 truncate">{{ c.name }}</span>
+      </div>
+      <!-- Health score badge -->
+      <span class="score-badge
+        {% if c.health >= 75 %}score-green
+        {% elif c.health >= 50 %}score-yellow
+        {% elif c.health >= 25 %}score-orange
+        {% else %}score-red{% endif %}">
+        {{ c.health }}
+      </span>
+    </div>
+
+    <!-- Stats grid -->
+    <div class="grid grid-cols-3 gap-2 text-center mb-4">
+      <div>
+        <p class="text-lg font-bold text-indigo-400">{{ c.total_hours }}</p>
+        <p class="text-xs text-slate-400">hrs tracked</p>
+      </div>
+      <div>
+        <p class="text-lg font-bold text-indigo-400">{{ c.commit_count }}</p>
+        <p class="text-xs text-slate-400">commits</p>
+      </div>
+      <div>
+        <p class="text-lg font-bold text-indigo-400">{{ c.health }}</p>
+        <p class="text-xs text-slate-400">health</p>
+      </div>
+    </div>
+
+    <!-- Health bar -->
+    <div class="health-bar-bg mb-3">
+      <div class="health-bar-fill" style="width: {{ c.health }}%; background: {{ c.color }}"></div>
+    </div>
+
+    <!-- Footer -->
+    <div class="flex justify-between text-xs text-slate-400">
+      <span>Last activity</span>
+      <span>{{ c.last_activity or 'never' }}</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="flex flex-col items-center justify-center py-24 text-slate-500">
+  <svg class="w-12 h-12 mb-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+      d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+  </svg>
+  <p class="text-sm">No projects tracked yet.</p>
+</div>
+{% endif %}
+{% endblock %}
