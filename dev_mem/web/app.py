@@ -890,6 +890,11 @@ def skills():
     )
 
 
+@app.route("/map")
+def system_map():
+    return render_template("map.html")
+
+
 @app.route("/api/agent-stats")
 def api_agent_stats():
     days = int(request.args.get("days", 30))

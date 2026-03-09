@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+{% block title %}System Map — dev-mem{% endblock %}
+{% block breadcrumb %}
+<h1 class="text-sm font-semibold text-slate-200">System Map</h1>
+{% endblock %}
+
+{% block topbar_extra %}
+<div class="flex items-center gap-2 text-xs text-slate-500">
+  <span>Scroll to zoom · Drag to pan · Click nodes for detail</span>
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="map-container" class="relative rounded-xl border border-slate-800 overflow-hidden" style="height: 78vh; background: #0b0f1a;">
+  <svg id="map-svg" width="100%" height="100%" style="cursor: grab;">
+    <defs>
+      <!-- Arrow markers -->
+      <marker id="arr-blue"  markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="#6366f1"/>
+      </marker>
+      <marker id="arr-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="#10b981"/>
+      </marker>
+      <marker id="arr-violet" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="#8b5cf6"/>
+      </marker>
+      <marker id="arr-cyan"  markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="#06b6d4"/>
+      </marker>
+      <marker id="arr-amber" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="#f59e0b"/>
+      </marker>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="3" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <g id="map-root" transform="translate(0,0) scale(1)">
+      <!-- Rendered by JS below -->
+    </g>
+  </svg>
+
+  <!-- Tooltip -->
+  <div id="tooltip" class="hidden absolute z-10 max-w-xs pointer-events-none
+       bg-slate-900 border border-slate-700 rounded-lg shadow-xl p-3 text-xs">
+    <p id="tt-title" class="font-semibold text-slate-100 mb-1"></p>
+    <p id="tt-desc" class="text-slate-400 leading-relaxed"></p>
+    <p id="tt-link" class="text-indigo-400 mt-1.5"></p>
+  </div>
+</div>
+
+<!-- Legend -->
+<div class="flex flex-wrap gap-4 mt-3 text-xs text-slate-500">
+  <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-indigo-600 inline-block"></span>Claude Code</span>
+  <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-violet-600 inline-block"></span>Collectors / Hooks</span>
+  <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-700 inline-block"></span>Database</span>
+  <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-cyan-700 inline-block"></span>Output / UI</span>
+  <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-amber-700 inline-block"></span>External</span>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Node definitions ──────────────────────────────────────────────────
+const NODES = [
+
+  // ── Claude Code (center-top) ──────────────────────────────────────
+  { id: "claude",       x: 520, y: 80,  w: 140, h: 44, color: "#4338ca", border: "#6366f1",
+    label: "Claude Code",  icon: "🤖",
+    desc: "The AI assistant. Emits hook events on every action: SessionStart, PostToolUse, PreCompact, Stop.",
+    link: null },
+
+  // ── Hooks layer ───────────────────────────────────────────────────
+  { id: "h-start",      x: 120, y: 220, w: 130, h: 40, color: "#5b21b6", border: "#7c3aed",
+    label: "SessionStart",  icon: "▶",
+    desc: "Fires when Claude starts. Runs context_injector — injects last sessions + learnings into system prompt (≤2500 chars).",
+    link: null },
+
+  { id: "h-tool",       x: 390, y: 220, w: 130, h: 40, color: "#5b21b6", border: "#7c3aed",
+    label: "PostToolUse",   icon: "🔧",
+    desc: "Fires after every tool (Read, Write, Edit, Bash, Agent, Skill…). Records observation, increments session counter, tracks Agent/Skill calls.",
+    link: null },
+
+  { id: "h-compact",    x: 660, y: 220, w: 130, h: 40, color: "#5b21b6", border: "#7c3aed",
+    label: "PreCompact",    icon: "📦",
+    desc: "Fires before context compression. Saves session summary + extracts learnings so continuity is preserved after reset.",
+    link: null },
+
+  { id: "h-stop",       x: 930, y: 220, w: 130, h: 40, color: "#5b21b6", border: "#7c3aed",
+    label: "Stop",          icon: "⏹",
+    desc: "Fires when session ends. Marks session complete, builds final summary, extracts learnings (bugfixes→mistake, decisions→insight, refactors→tip).",
+    link: null },
+
+  // ── Collectors ────────────────────────────────────────────────────
+  { id: "c-inject",     x: 120, y: 340, w: 130, h: 40, color: "#6d28d9", border: "#8b5cf6",
+    label: "context_injector", icon: "💉",
+    desc: "Reads session_summaries + learnings from DB, builds compact XML block, prints to stdout → injected into Claude system prompt.",
+    link: null },
+
+  { id: "c-claude",     x: 390, y: 340, w: 130, h: 40, color: "#6d28d9", border: "#8b5cf6",
+    label: "claude_code.py", icon: "📡",
+    desc: "Main PostToolUse handler. Records tool calls to claude_sessions, generates observations, detects errors, tracks Agent/Skill invocations.",
+    link: null },
+
+  { id: "c-compact",    x: 660, y: 340, w: 130, h: 40, color: "#6d28d9", border: "#8b5cf6",
+    label: "compact.py",    icon: "🗜",
+    desc: "PreCompact handler. Calls build_session_summary + extract_learnings. Checks for new observations since last save.",
+    link: null },
+
+  { id: "c-stop",       x: 930, y: 340, w: 130, h: 40, color: "#6d28d9", border: "#8b5cf6",
+    label: "session_stop.py", icon: "🏁",
+    desc: "Stop hook handler. Marks session completed, calls build_session_summary + extract_learnings. 8s timeout.",
+    link: null },
+
+  // ── Memory modules ─────────────────────────────────────────────────
+  { id: "m-tracker",    x: 660, y: 460, w: 130, h: 40, color: "#065f46", border: "#10b981",
+    label: "session_tracker", icon: "📋",
+    desc: "Session CRUD. Builds summaries: parses tool titles (Read:/Write:/Edit:/Bash:), extracts completed/learned lists.",
+    link: null },
+
+  { id: "m-obs",        x: 390, y: 460, w: 130, h: 40, color: "#065f46", border: "#10b981",
+    label: "observations.py", icon: "🔬",
+    desc: "Observation CRUD + FTS5 search. Rule-based generation from tool calls. Types: discovery, feature, refactor, change, bugfix, decision.",
+    link: null },
+
+  { id: "m-learn",      x: 930, y: 460, w: 130, h: 40, color: "#065f46", border: "#10b981",
+    label: "extract_learnings", icon: "🧠",
+    desc: "Processes observations → learnings table. Filters noise (trivial bash, file listings). mistake/insight/tip types.",
+    link: null },
+
+  // ── Database ──────────────────────────────────────────────────────
+  { id: "db",           x: 520, y: 590, w: 140, h: 50, color: "#064e3b", border: "#059669",
+    label: "SQLite DB",     icon: "🗄",
+    desc: "~/.dev-mem/mem.db — WAL mode. Tables: observations (17k+), claude_code_sessions, session_summaries, learnings, agent_skill_calls, decisions, projects, errors.",
+    link: null },
+
+  // ── Shell collectors ──────────────────────────────────────────────
+  { id: "c-terminal",   x: 100, y: 460, w: 120, h: 40, color: "#1e3a5f", border: "#3b82f6",
+    label: "terminal.py",   icon: "💻",
+    desc: "Shell hook (precmd/preexec). Records commands with duration, exit code, CWD. Filters secrets via sensitive_filter.py.",
+    link: null },
+
+  { id: "c-git",        x: 240, y: 460, w: 120, h: 40, color: "#1e3a5f", border: "#3b82f6",
+    label: "git.py",        icon: "🌿",
+    desc: "Post-commit hook. Records commit hash, message, changed files, insertions/deletions to git_events table.",
+    link: null },
+
+  // ── Output layer ──────────────────────────────────────────────────
+  { id: "web",          x: 180, y: 700, w: 130, h: 44, color: "#164e63", border: "#06b6d4",
+    label: "Web Dashboard", icon: "🖥",
+    desc: "Flask app at :8888. Pages: Home, Projects, Memory, Analytics, Team, Skills & Agents, Daily, Errors, Export.",
+    link: "/",  },
+
+  { id: "mcp",          x: 520, y: 700, w: 130, h: 44, color: "#164e63", border: "#06b6d4",
+    label: "MCP Server",    icon: "🔌",
+    desc: "Stdio JSON-RPC server. Tools: save_memory, search, get_observations, timeline. Used by Claude Code via mcpServers config.",
+    link: "/skills" },
+
+  { id: "cli",          x: 860, y: 700, w: 130, h: 44, color: "#164e63", border: "#06b6d4",
+    label: "CLI",           icon: "⌨",
+    desc: "dev-mem CLI. Commands: install, install-claude, init, status, web, mcp-server, upgrade, doctor, export, note, decide…",
+    link: null },
+
+  // ── External ──────────────────────────────────────────────────────
+  { id: "settings",     x: 920, y: 80,  w: 130, h: 40, color: "#451a03", border: "#d97706",
+    label: "~/.claude/settings.json", icon: "⚙",
+    desc: "Claude Code config. Defines hooks (SessionStart/Stop/PreCompact/PostToolUse) and mcpServers.dev-mem entry.",
+    link: "/skills" },
+
+  { id: "shell-rc",     x: 20,  y: 340, w: 90,  h: 40, color: "#451a03", border: "#d97706",
+    label: "~/.zshrc",     icon: "🐚",
+    desc: "Shell init file. Loads precmd/preexec hooks installed by dev-mem install. Triggers terminal.py collector.",
+    link: null },
+
+  { id: "git-hook",     x: 200, y: 340, w: 90,  h: 40, color: "#451a03", border: "#d97706",
+    label: ".git/hooks",   icon: "🪝",
+    desc: "Per-repo post-commit hook installed by dev-mem init. Triggers git.py collector on every commit.",
+    link: null },
+];
+
+// ── Edge definitions ──────────────────────────────────────────────────
+// [from, to, label, marker, dash]
+const EDGES = [
+  // Claude → hooks
+  ["claude",    "h-start",   "SessionStart",  "arr-blue",   false],
+  ["claude",    "h-tool",    "PostToolUse",   "arr-blue",   false],
+  ["claude",    "h-compact", "PreCompact",    "arr-blue",   false],
+  ["claude",    "h-stop",    "Stop",          "arr-blue",   false],
+
+  // hooks → collectors
+  ["h-start",   "c-inject",  "",              "arr-violet", false],
+  ["h-tool",    "c-claude",  "",              "arr-violet", false],
+  ["h-compact", "c-compact", "",              "arr-violet", false],
+  ["h-stop",    "c-stop",    "",              "arr-violet", false],
+
+  // collectors → memory/db
+  ["c-inject",  "db",        "READ",          "arr-green",  true],
+  ["c-claude",  "m-obs",     "insert_obs",    "arr-green",  false],
+  ["c-claude",  "m-tracker", "session CRUD",  "arr-green",  false],
+  ["c-compact", "m-tracker", "build_summary", "arr-green",  false],
+  ["c-compact", "m-learn",   "extract",       "arr-green",  false],
+  ["c-stop",    "m-tracker", "complete",      "arr-green",  false],
+  ["c-stop",    "m-learn",   "extract",       "arr-green",  false],
+
+  // memory → DB
+  ["m-obs",     "db",        "WRITE",         "arr-green",  false],
+  ["m-tracker", "db",        "WRITE",         "arr-green",  false],
+  ["m-learn",   "db",        "WRITE",         "arr-green",  false],
+
+  // shell collectors → DB
+  ["shell-rc",  "c-terminal","",              "arr-amber",  false],
+  ["git-hook",  "c-git",     "",              "arr-amber",  false],
+  ["c-terminal","db",        "commands",      "arr-green",  false],
+  ["c-git",     "db",        "git_events",    "arr-green",  false],
+
+  // DB → outputs
+  ["db",        "web",       "queries",       "arr-cyan",   false],
+  ["db",        "mcp",       "queries",       "arr-cyan",   false],
+  ["db",        "cli",       "queries",       "arr-cyan",   false],
+
+  // context injection back into Claude
+  ["c-inject",  "claude",    "system prompt", "arr-blue",   true],
+
+  // settings
+  ["settings",  "claude",    "configures",    "arr-amber",  true],
+  ["mcp",       "claude",    "tools",         "arr-cyan",   true],
+];
+
+// ── Build SVG ─────────────────────────────────────────────────────────
+
+const root = document.getElementById("map-root");
+
+function cx(n) { return n.x + n.w / 2; }
+function cy(n) { return n.y + n.h / 2; }
+
+const nodeMap = {};
+NODES.forEach(n => nodeMap[n.id] = n);
+
+// Draw edges first (behind nodes)
+const edgeGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+root.appendChild(edgeGroup);
+
+EDGES.forEach(([fid, tid, lbl, marker, dash]) => {
+  const f = nodeMap[fid], t = nodeMap[tid];
+  if (!f || !t) return;
+
+  const x1 = cx(f), y1 = cy(f), x2 = cx(t), y2 = cy(t);
+
+  // Cubic bezier — control points offset perpendicular
+  const dx = x2 - x1, dy = y2 - y1;
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const curve = 0.25;
+  const cpx = mx - dy * curve, cpy = my + dx * curve;
+
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  const d = `M${x1},${y1} Q${cpx},${cpy} ${x2},${y2}`;
+  path.setAttribute("d", d);
+  path.setAttribute("fill", "none");
+
+  const colors = { "arr-blue": "#6366f1", "arr-green": "#10b981", "arr-violet": "#8b5cf6", "arr-cyan": "#06b6d4", "arr-amber": "#f59e0b" };
+  const col = colors[marker] || "#64748b";
+  path.setAttribute("stroke", col);
+  path.setAttribute("stroke-width", "1.5");
+  path.setAttribute("opacity", "0.55");
+  if (dash) path.setAttribute("stroke-dasharray", "5,4");
+  path.setAttribute("marker-end", `url(#${marker})`);
+  edgeGroup.appendChild(path);
+
+  // Label
+  if (lbl) {
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", cpx);
+    text.setAttribute("y", cpy - 4);
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("font-size", "9");
+    text.setAttribute("fill", col);
+    text.setAttribute("opacity", "0.7");
+    text.textContent = lbl;
+    edgeGroup.appendChild(text);
+  }
+});
+
+// Draw nodes
+NODES.forEach(n => {
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  g.style.cursor = "pointer";
+
+  // Outer glow rect
+  const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  rect.setAttribute("x", n.x); rect.setAttribute("y", n.y);
+  rect.setAttribute("width", n.w); rect.setAttribute("height", n.h);
+  rect.setAttribute("rx", "8");
+  rect.setAttribute("fill", n.color);
+  rect.setAttribute("stroke", n.border);
+  rect.setAttribute("stroke-width", "1.5");
+  g.appendChild(rect);
+
+  // Icon
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  icon.setAttribute("x", n.x + 12);
+  icon.setAttribute("y", n.y + n.h / 2 + 5);
+  icon.setAttribute("font-size", "14");
+  icon.textContent = n.icon;
+  g.appendChild(icon);
+
+  // Label
+  const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  label.setAttribute("x", n.x + 30);
+  label.setAttribute("y", n.y + n.h / 2 + 5);
+  label.setAttribute("font-size", "11");
+  label.setAttribute("font-weight", "600");
+  label.setAttribute("fill", "#e2e8f0");
+  label.setAttribute("font-family", "ui-monospace, monospace");
+  label.textContent = n.label;
+  g.appendChild(label);
+
+  // Hover + tooltip
+  const tooltip = document.getElementById("tooltip");
+  const ttTitle = document.getElementById("tt-title");
+  const ttDesc  = document.getElementById("tt-desc");
+  const ttLink  = document.getElementById("tt-link");
+
+  g.addEventListener("mouseenter", (e) => {
+    rect.setAttribute("stroke-width", "2.5");
+    rect.setAttribute("filter", "url(#glow)");
+    ttTitle.textContent = n.icon + " " + n.label;
+    ttDesc.textContent  = n.desc;
+    ttLink.textContent  = n.link ? "→ Open in dashboard" : "";
+    tooltip.classList.remove("hidden");
+  });
+  g.addEventListener("mousemove", (e) => {
+    const container = document.getElementById("map-container");
+    const box = container.getBoundingClientRect();
+    let tx = e.clientX - box.left + 16;
+    let ty = e.clientY - box.top  - 10;
+    if (tx + 290 > box.width)  tx = e.clientX - box.left - 300;
+    if (ty + 120 > box.height) ty = e.clientY - box.top  - 130;
+    tooltip.style.left = tx + "px";
+    tooltip.style.top  = ty + "px";
+  });
+  g.addEventListener("mouseleave", () => {
+    rect.setAttribute("stroke-width", "1.5");
+    rect.removeAttribute("filter");
+    tooltip.classList.add("hidden");
+  });
+  g.addEventListener("click", () => {
+    if (n.link) window.location = n.link;
+  });
+
+  root.appendChild(g);
+});
+
+// ── Pan + Zoom ────────────────────────────────────────────────────────
+const svg  = document.getElementById("map-svg");
+const mapRoot = document.getElementById("map-root");
+let vx = -60, vy = -20, scale = 0.72;
+let dragging = false, lastX = 0, lastY = 0;
+
+function applyTransform() {
+  mapRoot.setAttribute("transform", `translate(${vx},${vy}) scale(${scale})`);
+}
+applyTransform();
+
+svg.addEventListener("mousedown", e => {
+  dragging = true; lastX = e.clientX; lastY = e.clientY;
+  svg.style.cursor = "grabbing";
+});
+window.addEventListener("mouseup", () => { dragging = false; svg.style.cursor = "grab"; });
+window.addEventListener("mousemove", e => {
+  if (!dragging) return;
+  vx += e.clientX - lastX; vy += e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  applyTransform();
+});
+svg.addEventListener("wheel", e => {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? 0.9 : 1.11;
+  scale = Math.min(2, Math.max(0.3, scale * delta));
+  applyTransform();
+}, { passive: false });
+</script>
+{% endblock %}
