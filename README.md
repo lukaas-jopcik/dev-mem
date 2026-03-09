@@ -23,10 +23,13 @@ You open Claude Code. It has no idea what you were working on yesterday. You pas
 dev-mem hooks into Claude Code and injects the last sessions, recent decisions, and extracted learnings at startup — automatically. No prompts, no setup per session, no copy-pasting.
 
 ```
-Monday:    "We're using Drizzle ORM, no raw SQL. Auth is Better Auth."
-Tuesday:   Claude already knows.
-Friday:    Claude remembers you fixed that Prisma migration issue on Wednesday.
-Next week: Same context, zero re-explaining.
+# without dev-mem
+You: "we use drizzle, not prisma. auth is better-auth. we decided last week not to use raw sql."
+Claude: "Got it! So you're using Drizzle ORM..."
+
+# with dev-mem
+You: "add user settings page"
+Claude: [already knows your stack]
 ```
 
 ---
