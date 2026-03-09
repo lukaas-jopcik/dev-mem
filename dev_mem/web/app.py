@@ -1041,6 +1041,122 @@ def api_agent_stats():
     })
 
 
+@app.route("/tokens")
+def tokens():
+    return render_template("tokens.html")
+
+
+@app.route("/api/token-stats")
+def api_token_stats():
+    """
+    Token savings estimation.
+
+    Methodology (transparent):
+    - Measured: actual context_injected_chars from claude_code_sessions
+    - Estimated manual baseline: chars a dev would type to re-explain context
+      (conservative: 300 tokens = 1200 chars; realistic: 600 tokens = 2400 chars)
+    - Back-and-forth rounds saved: 1-2 clarifying rounds × ~300 tokens each
+    - Net saving = manual_baseline + rounds_saved - injected_tokens
+    """
+    CHARS_PER_TOKEN = 4      # standard ~4 chars/token for Claude
+    MANUAL_TOKENS_LOW = 300  # minimal re-explanation
+    MANUAL_TOKENS_MID = 600  # realistic project context
+    MANUAL_TOKENS_HIGH = 1200  # detailed context + preferences
+    ROUNDS_SAVED_TOKENS = 400  # avg 1.5 clarifying rounds × ~270 tokens
+
+    try:
+        # Sessions with tracked injection size
+        rows = _db._conn.execute(
+            "SELECT memory_session_id, started_at, context_injected_chars, "
+            "context_had_prior_sessions, tool_call_count "
+            "FROM claude_code_sessions ORDER BY started_at"
+        ).fetchall()
+
+        sessions_total = len(rows)
+        sessions_with_context = sum(1 for r in rows if (r["context_injected_chars"] or 0) > 0)
+        sessions_with_prior = sum(1 for r in rows if (r["context_had_prior_sessions"] or 0) > 0)
+
+        # For sessions without tracked size, estimate retroactively:
+        # a session had context if there were summaries in DB before it started
+        summary_dates = [r["created_at"] for r in _db._conn.execute(
+            "SELECT created_at FROM session_summaries ORDER BY created_at"
+        ).fetchall()]
+        first_summary_at = summary_dates[0] if summary_dates else None
+
+        total_injected_chars = 0
+        sessions_with_prior_retro = 0
+        for r in rows:
+            chars = r["context_injected_chars"] or 0
+            had_prior = r["context_had_prior_sessions"] or 0
+            # Retroactive: if no tracked data, estimate if session happened after first summary
+            if chars == 0 and first_summary_at and (r["started_at"] or "") > first_summary_at:
+                chars = 1800  # conservative estimate ~450 tokens
+                had_prior = 1
+            total_injected_chars += chars
+            if had_prior:
+                sessions_with_prior_retro += 1
+
+        injected_tokens = total_injected_chars // CHARS_PER_TOKEN
+        sessions_with_prior = max(sessions_with_prior, sessions_with_prior_retro)
+        valuable_sessions = sessions_with_prior
+
+        manual_tokens_saved_low  = valuable_sessions * (MANUAL_TOKENS_LOW  + ROUNDS_SAVED_TOKENS) - injected_tokens
+        manual_tokens_saved_mid  = valuable_sessions * (MANUAL_TOKENS_MID  + ROUNDS_SAVED_TOKENS) - injected_tokens
+        manual_tokens_saved_high = valuable_sessions * (MANUAL_TOKENS_HIGH + ROUNDS_SAVED_TOKENS) - injected_tokens
+
+        # Daily breakdown for chart
+        daily = _db._conn.execute(
+            "SELECT DATE(started_at) AS d, "
+            "SUM(context_injected_chars) AS injected_chars, "
+            "COUNT(*) AS sessions, "
+            "SUM(CASE WHEN context_had_prior_sessions=1 THEN 1 ELSE 0 END) AS with_prior "
+            "FROM claude_code_sessions "
+            "GROUP BY DATE(started_at) ORDER BY d"
+        ).fetchall()
+
+        # Learnings as proxy for "knowledge that would require re-explanation"
+        total_learnings = _db._conn.execute("SELECT COUNT(*) AS n FROM learnings").fetchone()["n"]
+        total_decisions = _db._conn.execute("SELECT COUNT(*) AS n FROM decisions").fetchone()["n"]
+
+        # Total observations = tool calls tracked
+        total_obs = _db._conn.execute("SELECT COUNT(*) AS n FROM observations").fetchone()["n"]
+
+        return jsonify({
+            "sessions_total": sessions_total,
+            "sessions_with_context": sessions_with_context,
+            "sessions_with_prior": sessions_with_prior,
+            "injected_tokens_total": injected_tokens,
+            "saved_tokens": {
+                "low":  max(0, manual_tokens_saved_low),
+                "mid":  max(0, manual_tokens_saved_mid),
+                "high": max(0, manual_tokens_saved_high),
+            },
+            "per_session_avg_injected": injected_tokens // max(sessions_with_context, 1),
+            "total_learnings": total_learnings,
+            "total_decisions": total_decisions,
+            "total_observations": total_obs,
+            "methodology": {
+                "chars_per_token": CHARS_PER_TOKEN,
+                "manual_baseline_low_tokens": MANUAL_TOKENS_LOW,
+                "manual_baseline_mid_tokens": MANUAL_TOKENS_MID,
+                "manual_baseline_high_tokens": MANUAL_TOKENS_HIGH,
+                "rounds_saved_tokens": ROUNDS_SAVED_TOKENS,
+                "note": "Savings = sessions_with_prior × (manual_baseline + rounds_saved) − injected_tokens",
+            },
+            "daily": [
+                {
+                    "date": r["d"],
+                    "injected_tokens": (r["injected_chars"] or 0) // CHARS_PER_TOKEN,
+                    "sessions": r["sessions"],
+                    "with_prior": r["with_prior"],
+                }
+                for r in daily
+            ],
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 def run():
     app.run(host="127.0.0.1", port=8888, debug=False, threaded=True)
 

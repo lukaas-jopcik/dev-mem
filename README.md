@@ -2,10 +2,11 @@
 
 > Claude forgets everything when a session ends. dev-mem fixes that.
 
-[![Python](https://img.shields.io/badge/Python-3.10+-blue?style=flat&logo=python&logoColor=white)](https://python.org)
-[![License](https://img.shields.io/badge/License-MIT-green?style=flat)](LICENSE)
-[![PyPI](https://img.shields.io/pypi/v/dev-mem?style=flat&logo=pypi&logoColor=white)](https://pypi.org/project/dev-mem)
-[![Status](https://img.shields.io/badge/Status-Active-brightgreen?style=flat)](https://github.com/jopcik/dev-mem)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776ab?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![License](https://img.shields.io/badge/License-MIT-22c55e?style=flat-square)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/dev-mem?style=flat-square&logo=pypi&logoColor=white&color=6366f1)](https://pypi.org/project/dev-mem)
+[![Stars](https://img.shields.io/github/stars/lukaas-jopcik/dev-mem?style=flat-square&logo=github&color=f59e0b)](https://github.com/lukaas-jopcik/dev-mem/stargazers)
+[![Issues](https://img.shields.io/github/issues/lukaas-jopcik/dev-mem?style=flat-square&color=64748b)](https://github.com/lukaas-jopcik/dev-mem/issues)
 
 ---
 
@@ -18,97 +19,49 @@ No memory of your project. No memory of decisions you already made. No memory of
 **dev-mem gives Claude a brain that persists.**
 
 ```
-Monday:   "We're using Drizzle ORM, no raw SQL. Auth is Better Auth."
-Tuesday:  Claude already knows.
-Friday:   Claude remembers you fixed that Prisma migration issue on Wednesday.
+Monday:    "We're using Drizzle ORM, no raw SQL. Auth is Better Auth."
+Tuesday:   Claude already knows.
+Friday:    Claude remembers you fixed that Prisma migration issue on Wednesday.
+Next week: Claude knows your style, your stack, your decisions.
 ```
+
+---
+
+## Token savings
+
+Running dev-mem doesn't just save time — it saves tokens.
+
+Instead of re-explaining ~600 tokens of project context every session, dev-mem injects a compact structured summary. Across sessions, this compounds.
+
+```
+Per session saved (estimated):
+  Manual re-explanation      ~600 tokens
+  Clarifying rounds avoided  ~400 tokens
+  Context injected by dev-mem ~450 tokens
+  ─────────────────────────────────────
+  Net saving                 ~550 tokens / session
+```
+
+The dashboard includes a **Token Savings** page with real measurements — actual injection size vs. estimated manual cost, per session, over time.
 
 ---
 
 ## What it does
 
-dev-mem runs silently in the background via Claude Code hooks. Every session, every tool call, every decision — tracked automatically.
+dev-mem runs silently via Claude Code hooks. Every session, every tool call, every decision — tracked automatically. No commands to remember.
 
 **Session memory**
-- Injects the last 2 session summaries + recent learnings into every new session
-- Survives context window resets via the PreCompact hook
+- Injects the last 2 session summaries + recent learnings at every session start
+- Survives context window resets via the `PreCompact` hook — no continuity loss
 - Per-project context — different projects, different memory
 
 **Automatic learning extraction**
-- Bugfixes → `mistake` learnings ("never use X for Y")
+- Bugfixes → `mistake` learnings ("don't do X in Y context")
 - Decisions → `insight` learnings ("we chose Z because")
 - Refactors → `tip` learnings
 - Filters noise — skips trivial bash commands, file listings, JSON blobs
 
-**Web dashboard** (`dev-mem web` → http://localhost:8888)
-- Projects with health score, observation breakdown, active days
-- Memory browser — searchable, filterable by type
-- Analytics — daily activity, type distribution, hourly heatmap
-- Skills & Agents — which Claude agents and skills you actually use, your full plugin catalog
-- System Map — interactive visual of the full architecture + your installed plugins
-
-**MCP tools** (available inside Claude Code)
-- `save_memory` — save a learning or decision mid-session
-- `search` — find anything from past sessions
-- `get_observations` — retrieve session history
-- `timeline` — chronological view around any observation
-
----
-
-## Install
-
-```bash
-git clone https://github.com/jopcik/dev-mem.git
-cd dev-mem
-bash setup.sh
-```
-
-That's it. `setup.sh` installs the package via pipx, runs migrations, installs shell hooks, and configures Claude Code.
-
-**Or from PyPI:**
-
-```bash
-pip install dev-mem
-dev-mem install          # shell hooks
-dev-mem install-claude   # Claude Code hooks + MCP server
-```
-
-Then restart Claude Code. Memory starts working immediately — no further config needed.
-
----
-
-## How it works
-
-```
-Claude Code session
-│
-├── SessionStart ──► context_injector
-│                       reads DB → builds <dev-mem-context> XML
-│                       injects last sessions + learnings into system prompt
-│
-├── PostToolUse ──► claude_code.py          (every tool call)
-│                       records observation (Read/Write/Edit/Bash)
-│                       tracks Agent + Skill invocations
-│                       detects errors → upserts error table
-│
-├── PreCompact ───► compact.py              (before context reset)
-│                       saves session summary
-│                       extracts learnings so far
-│                       next session picks up continuity
-│
-└── Stop ─────────► session_stop.py         (session ends)
-                        builds final summary
-                        extracts learnings: bugfix→mistake, decision→insight
-                        marks session complete
-```
-
-**Database:** `~/.dev-mem/mem.db` — SQLite with WAL. Nothing leaves your machine.
-
----
-
-## Session context injection
-
-At every session start, Claude receives a compact block like this:
+**What gets injected** (max 2500 chars, ~625 tokens):
 
 ```xml
 <dev-mem-context project="my-app" generated="2026-03-09T...">
@@ -125,13 +78,74 @@ At every session start, Claude receives a compact block like this:
 </dev-mem-context>
 ```
 
-Max 2500 chars. Token-efficient. Meaningful — not raw tool titles.
+**Web dashboard** — `dev-mem web` → http://localhost:8888
+
+| Page | What you see |
+|------|-------------|
+| Home | Today's stats, live observation feed |
+| Projects | Health score, obs breakdown, activity per project |
+| Memory | Searchable observation browser |
+| Analytics | Daily activity, type distribution, hourly heatmap |
+| Token Savings | Actual injection size vs. manual cost, per session |
+| Skills & Agents | Which Claude agents/skills you use + full plugin catalog |
+| System Map | Interactive architecture diagram + your installed plugins |
+| Daily | Day view, observations grouped by project |
+
+**MCP tools** (available inside Claude Code via `save_memory`, `search`, `timeline`, `get_observations`)
 
 ---
 
-## Claude Code hooks config
+## Install
 
-dev-mem configures these hooks automatically via `dev-mem install-claude`:
+```bash
+git clone https://github.com/lukaas-jopcik/dev-mem.git
+cd dev-mem
+bash setup.sh
+```
+
+`setup.sh` installs the package, runs migrations, installs shell hooks, and configures Claude Code. Then restart Claude Code — memory starts working immediately.
+
+**Or from PyPI:**
+
+```bash
+pip install dev-mem
+dev-mem install-claude   # Claude Code hooks + MCP server
+```
+
+---
+
+## How it works
+
+```
+Claude Code session
+│
+├── SessionStart ──► context_injector.py
+│                    reads DB → builds compact XML → injects into system prompt
+│                    records injection size for token savings tracking
+│
+├── PostToolUse  ──► claude_code.py              (fires on every tool call)
+│                    records observation: Read/Write/Edit/Bash
+│                    tracks Agent + Skill invocations separately
+│                    detects errors → upserts error table
+│
+├── PreCompact   ──► compact.py                  (before context window reset)
+│                    saves session summary
+│                    extracts learnings so far
+│                    next session starts with full continuity
+│
+└── Stop         ──► session_stop.py             (session ends)
+                     builds final summary (what was edited, what was fixed)
+                     extracts learnings: bugfix→mistake, decision→insight, refactor→tip
+                     marks session complete
+```
+
+**Database:** `~/.dev-mem/mem.db` — SQLite WAL. 21 tables. Nothing leaves your machine.
+
+---
+
+## Claude Code config
+
+`dev-mem install-claude` writes this to `~/.claude/settings.json`:
 
 ```json
 {
@@ -151,55 +165,39 @@ dev-mem configures these hooks automatically via `dev-mem install-claude`:
 
 ## CLI
 
-| Command | Description |
-|---------|-------------|
-| `dev-mem install` | Install shell hooks and cron |
-| `dev-mem install-claude` | Configure Claude Code hooks + MCP |
-| `dev-mem init` | Register current git repo as a project |
-| `dev-mem web` | Start dashboard at http://localhost:8888 |
-| `dev-mem status` | Today's activity summary |
-| `dev-mem note <text>` | Save a manual note |
-| `dev-mem decide <title>` | Log an architectural decision |
-| `dev-mem upgrade` | Run database migrations |
-| `dev-mem doctor` | Diagnose hooks, DB, Claude Code integration |
-| `dev-mem mcp-server` | Start MCP server (used by Claude Code) |
-| `dev-mem export` | Export data as JSON / CSV / Markdown |
-
----
-
-## Web dashboard
-
 ```
-http://localhost:8888
-│
-├── /              Home — today's stats, live observation feed
-├── /projects      All projects — health, obs breakdown, activity
-├── /project/<n>   Project detail — obs timeline, session log
-├── /memory        Observation browser — search + filter by type
-├── /analytics     Charts — daily activity, type distribution, heatmap
-├── /team          Sessions, tool usage, active projects
-├── /skills        Skills & Agents — usage stats + full Claude catalog
-├── /map           System Map — interactive architecture + your setup
-└── /daily         Day view — observations grouped by project
+dev-mem install-claude   Configure Claude Code hooks + MCP server
+dev-mem install          Install shell hooks and cron
+dev-mem init             Register current git repo as a tracked project
+dev-mem web              Start dashboard at http://localhost:8888
+dev-mem status           Today's activity summary
+dev-mem note <text>      Save a manual note
+dev-mem decide <title>   Log an architectural decision
+dev-mem upgrade          Run database migrations
+dev-mem doctor           Diagnose hooks, DB, Claude Code integration
+dev-mem export           Export data as JSON / CSV / Markdown
 ```
-
----
-
-## Privacy
-
-- **All local.** SQLite database at `~/.dev-mem/mem.db`. Nothing ever leaves your machine.
-- **No telemetry.** No analytics, no network calls, no external APIs.
-- **Secret filtering.** Commands are scanned for tokens, passwords, and API keys before storage.
-- **Your data.** `dev-mem export` gives you everything as JSON, CSV, or Markdown. `dev-mem rollback-hooks` removes all hooks instantly.
 
 ---
 
 ## Requirements
 
 - Python 3.10+
-- Claude Code (for session memory hooks)
+- Claude Code
 - macOS or Linux
 - pipx (recommended) or pip
+
+---
+
+## Privacy
+
+All local. All yours.
+
+- **No telemetry.** No analytics, no network calls, no external APIs.
+- **SQLite only.** Everything at `~/.dev-mem/mem.db`.
+- **Secret filtering.** Commands scanned for tokens, passwords, API keys before storage.
+- **Full export.** `dev-mem export` gives you JSON, CSV, or Markdown.
+- **Clean uninstall.** `dev-mem rollback-hooks` removes everything instantly.
 
 ---
 
@@ -211,7 +209,7 @@ http://localhost:8888
 4. `black . && ruff check .`
 5. Open a PR — describe what and why
 
-Issues and ideas welcome. Open an issue first for larger changes.
+Issues welcome. Open one before large changes.
 
 ---
 
@@ -220,14 +218,20 @@ Issues and ideas welcome. Open an issue first for larger changes.
 - [x] Session memory with automatic context injection
 - [x] Automatic learning extraction (bugfix / decision / refactor)
 - [x] PreCompact hook for mid-session continuity
-- [x] MCP server with save_memory / search / timeline
+- [x] MCP server — save_memory / search / timeline
 - [x] Web dashboard with analytics
+- [x] Token savings measurement
 - [x] Agent + Skill usage tracking
 - [x] Interactive System Map with dynamic plugin loading
 - [ ] Team shared memory (multiple devs, one project)
-- [ ] Learning quality scoring
-- [ ] VS Code / Cursor extension
 - [ ] Export to Claude Projects knowledge base
+- [ ] VS Code / Cursor extension
+
+---
+
+## Star history
+
+[![Star History Chart](https://api.star-history.com/svg?repos=lukaas-jopcik/dev-mem&type=Date)](https://star-history.com/#lukaas-jopcik/dev-mem&Date)
 
 ---
 
@@ -237,4 +241,4 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**If this saves you context-reset frustration, drop a star. It takes one second and it helps.**
+**If this saves you context-reset frustration, drop a star.**

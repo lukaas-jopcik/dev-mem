@@ -236,6 +236,8 @@ def write_context_to_stdout() -> None:
         )
         if block:
             print(block, flush=True)
+            # Record injection size for token savings tracking
+            _save_injection_size(block, cwd)
 
     except Exception:
         pass
@@ -245,3 +247,34 @@ def write_context_to_stdout() -> None:
                 conn.close()
             except Exception:
                 pass
+
+
+def _save_injection_size(block: str, cwd: str) -> None:
+    """
+    Store context_injected_chars on the current session row.
+    Uses a separate short-lived connection so query_only doesn't block us.
+    """
+    try:
+        from dev_mem.settings import DB_PATH
+
+        session_id = os.environ.get("CLAUDE_SESSION_ID", "")
+        if not session_id:
+            return
+
+        chars = len(block)
+        had_prior = 1 if "<session " in block else 0
+
+        conn2 = sqlite3.connect(str(DB_PATH), timeout=1.0)
+        conn2.execute("PRAGMA journal_mode=WAL")
+        try:
+            conn2.execute(
+                "UPDATE claude_code_sessions "
+                "SET context_injected_chars = ?, context_had_prior_sessions = ? "
+                "WHERE memory_session_id = ?",
+                (chars, had_prior, session_id),
+            )
+            conn2.commit()
+        finally:
+            conn2.close()
+    except Exception:
+        pass

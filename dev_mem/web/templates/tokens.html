@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Token Savings — dev-mem{% endblock %}
+{% block breadcrumb %}
+<h1 class="text-sm font-semibold text-slate-200">Token Savings</h1>
+{% endblock %}
+
+{% block content %}
+
+<!-- Loading state -->
+<div id="loading" class="text-center py-20 text-slate-500 text-sm">Loading stats…</div>
+
+<!-- Content (hidden until loaded) -->
+<div id="content" class="hidden">
+
+  <!-- Hero number -->
+  <div class="card mb-6 text-center py-8">
+    <p class="text-xs text-slate-500 uppercase tracking-widest mb-2">Estimated tokens saved</p>
+    <p class="text-6xl font-bold text-emerald-400 tabular-nums" id="saved-mid">—</p>
+    <p class="text-sm text-slate-500 mt-2">conservative estimate across <span id="sessions-with-prior" class="text-slate-300 font-semibold"></span> sessions with prior context</p>
+    <div class="flex justify-center gap-6 mt-4 text-xs text-slate-500">
+      <span>Low: <span id="saved-low" class="text-slate-400 font-mono"></span></span>
+      <span>Mid: <span id="saved-mid2" class="text-emerald-400 font-mono font-semibold"></span></span>
+      <span>High: <span id="saved-high" class="text-slate-400 font-mono"></span></span>
+    </div>
+  </div>
+
+  <!-- Stats row -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+      <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Sessions total</p>
+      <p class="text-3xl font-bold text-slate-300" id="stat-sessions">—</p>
+    </div>
+    <div class="stat-card">
+      <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Tokens injected</p>
+      <p class="text-3xl font-bold text-indigo-400" id="stat-injected">—</p>
+      <p class="text-xs text-slate-600 mt-1">avg <span id="stat-avg"></span>/session</p>
+    </div>
+    <div class="stat-card">
+      <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Learnings stored</p>
+      <p class="text-3xl font-bold text-amber-400" id="stat-learnings">—</p>
+    </div>
+    <div class="stat-card">
+      <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Observations</p>
+      <p class="text-3xl font-bold text-slate-300" id="stat-obs">—</p>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="card mb-6">
+    <div class="section-header">
+      <span>Tokens per session over time</span>
+      <span class="text-slate-500 text-xs">injected vs. estimated manual</span>
+    </div>
+    <canvas id="tokenChart" height="90"></canvas>
+  </div>
+
+  <!-- Per-session comparison table -->
+  <div class="card mb-6">
+    <div class="section-header"><span>Per-session breakdown</span></div>
+    <table class="data-table w-full">
+      <thead><tr>
+        <th>Date</th>
+        <th class="text-right">Sessions</th>
+        <th class="text-right">With prior ctx</th>
+        <th class="text-right">Injected tokens</th>
+        <th class="text-right">Est. manual</th>
+        <th class="text-right">Net saved</th>
+      </tr></thead>
+      <tbody id="daily-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Methodology -->
+  <div class="card">
+    <div class="section-header"><span>Methodology</span><span class="text-slate-600 text-xs">transparent estimates</span></div>
+    <div class="text-xs text-slate-500 space-y-2 leading-relaxed">
+      <p><span class="text-slate-300 font-semibold">What we measure:</span> actual <code class="bg-slate-800 px-1 rounded">context_injected_chars</code> saved per session when the SessionStart hook runs. Divided by 4 to get tokens (standard Claude/GPT approximation).</p>
+      <p><span class="text-slate-300 font-semibold">Manual baseline:</span> what a developer would need to type to re-establish project context from scratch per session.</p>
+      <ul class="pl-4 space-y-0.5 text-slate-600">
+        <li>Low (300 tokens) — minimal: stack + current task</li>
+        <li>Mid (600 tokens) — realistic: stack + decisions + recent work</li>
+        <li>High (1200 tokens) — detailed: full project context + preferences + history</li>
+      </ul>
+      <p><span class="text-slate-300 font-semibold">Rounds saved:</span> +400 tokens per session — estimated 1–2 clarifying questions Claude would ask without context (~270 tokens each).</p>
+      <p><span class="text-slate-300 font-semibold">Formula:</span> <code class="bg-slate-800 px-1 rounded">savings = sessions_with_prior × (baseline + rounds_saved) − total_injected</code></p>
+      <p class="text-slate-600 italic">These are estimates. Actual savings depend on how much context you would manually provide and how often Claude needs clarification.</p>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+const MANUAL_MID = 600 + 400;  // baseline + rounds_saved
+
+fetch("/api/token-stats")
+  .then(r => r.json())
+  .then(d => {
+    document.getElementById("loading").classList.add("hidden");
+    document.getElementById("content").classList.remove("hidden");
+
+    // Hero
+    document.getElementById("saved-mid").textContent  = fmt(d.saved_tokens.mid);
+    document.getElementById("saved-low").textContent  = fmt(d.saved_tokens.low);
+    document.getElementById("saved-mid2").textContent = fmt(d.saved_tokens.mid);
+    document.getElementById("saved-high").textContent = fmt(d.saved_tokens.high);
+    document.getElementById("sessions-with-prior").textContent = d.sessions_with_prior;
+
+    // Stats
+    document.getElementById("stat-sessions").textContent  = d.sessions_total;
+    document.getElementById("stat-injected").textContent  = fmt(d.injected_tokens_total);
+    document.getElementById("stat-avg").textContent       = fmt(d.per_session_avg_injected);
+    document.getElementById("stat-learnings").textContent = d.total_learnings;
+    document.getElementById("stat-obs").textContent       = fmtK(d.total_observations);
+
+    // Chart
+    const labels = d.daily.map(r => r.date);
+    const injected = d.daily.map(r => r.injected_tokens);
+    const manual   = d.daily.map(r => r.with_prior * MANUAL_MID);
+    const saved    = d.daily.map((r, i) => Math.max(0, manual[i] - injected[i]));
+
+    const ctx = document.getElementById("tokenChart").getContext("2d");
+    new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          { label: "Tokens injected", data: injected,
+            backgroundColor: "rgba(99,102,241,0.7)", borderRadius: 3 },
+          { label: "Est. manual cost", data: manual,
+            backgroundColor: "rgba(100,116,139,0.3)", borderRadius: 3,
+            borderColor: "rgba(100,116,139,0.5)", borderWidth: 1 },
+          { label: "Net saved", data: saved,
+            type: "line", borderColor: "#10b981", backgroundColor: "rgba(16,185,129,0.1)",
+            tension: 0.3, fill: true, pointRadius: 3, yAxisID: "y" },
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { labels: { color: "#94a3b8", font: { size: 11 } } },
+          tooltip: { mode: "index", intersect: false }
+        },
+        scales: {
+          x: { stacked: false, ticks: { color: "#64748b", font: { size: 10 } },
+               grid: { color: "rgba(255,255,255,0.03)" } },
+          y: { ticks: { color: "#64748b", font: { size: 10 } },
+               grid: { color: "rgba(255,255,255,0.05)" } }
+        }
+      }
+    });
+
+    // Table
+    const tbody = document.getElementById("daily-tbody");
+    d.daily.forEach(r => {
+      const man = r.with_prior * MANUAL_MID;
+      const net = Math.max(0, man - r.injected_tokens);
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td class="text-slate-400">${r.date}</td>
+        <td class="text-right font-mono">${r.sessions}</td>
+        <td class="text-right font-mono text-indigo-400">${r.with_prior}</td>
+        <td class="text-right font-mono text-indigo-400">${fmt(r.injected_tokens)}</td>
+        <td class="text-right font-mono text-slate-500">${fmt(man)}</td>
+        <td class="text-right font-mono font-semibold ${net>0?'text-emerald-400':'text-slate-600'}">${net>0?'+'+fmt(net):'–'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  })
+  .catch(e => {
+    document.getElementById("loading").textContent = "Could not load token stats.";
+  });
+
+function fmt(n)  { return n == null ? "—" : Number(n).toLocaleString(); }
+function fmtK(n) { return n >= 1000 ? (n/1000).toFixed(1)+"k" : String(n); }
+</script>
+{% endblock %}
