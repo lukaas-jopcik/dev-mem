@@ -176,6 +176,19 @@ def _run() -> None:
                 )
 
         # ------------------------------------------------------------------
+        # Agent / Skill invocation tracking
+        # ------------------------------------------------------------------
+        if tool in ("Agent", "Skill") and memory_session_id:
+            _record_agent_skill(
+                conn=db._conn,
+                tool=tool,
+                input_obj=input_obj,
+                memory_session_id=memory_session_id,
+                project_id=project_id,
+                project_name=project_name,
+            )
+
+        # ------------------------------------------------------------------
         # Memory subsystem: session tracking + observation generation
         # ------------------------------------------------------------------
         if memory_session_id and settings.get("observations_enabled", True):
@@ -193,6 +206,55 @@ def _run() -> None:
 
     finally:
         db.close()
+
+
+def _record_agent_skill(
+    conn: Any,
+    tool: str,
+    input_obj: Any,
+    memory_session_id: str,
+    project_id: Optional[int],
+    project_name: str,
+) -> None:
+    """
+    Record an Agent or Skill invocation in agent_skill_calls table.
+    Runs inside the 50 ms budget; errors are swallowed silently.
+    """
+    from datetime import datetime, timezone
+
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        call_type = tool.lower()  # "agent" or "skill"
+        name = ""
+        description = ""
+        args = ""
+        is_background = 0
+
+        if isinstance(input_obj, dict):
+            if tool == "Agent":
+                name = str(input_obj.get("subagent_type") or input_obj.get("name") or "")
+                description = str(input_obj.get("description") or input_obj.get("prompt", "")[:200])
+                is_background = int(bool(input_obj.get("run_in_background", False)))
+            elif tool == "Skill":
+                name = str(input_obj.get("skill") or "")
+                args = str(input_obj.get("args") or "")[:200]
+
+        if not name:
+            return
+
+        conn.execute(
+            """
+            INSERT INTO agent_skill_calls
+                (memory_session_id, project_id, project, call_type, name,
+                 description, args, is_background, ts)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (memory_session_id, project_id, project_name, call_type,
+             name, description, args, is_background, now_iso),
+        )
+        conn.commit()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _record_memory(

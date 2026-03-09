@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}Skills & Agents — dev-mem{% endblock %}
+{% block breadcrumb %}
+<h1 class="text-sm font-semibold text-slate-200">Skills &amp; Agents</h1>
+{% endblock %}
+
+{% block topbar_extra %}
+<select onchange="window.location='/skills?days='+this.value"
+        class="text-xs bg-slate-800 border border-slate-700 text-slate-300 rounded px-2 py-1">
+  {% for d in [7,14,30,90] %}
+  <option value="{{ d }}" {% if d == days %}selected{% endif %}>Last {{ d }} days</option>
+  {% endfor %}
+</select>
+{% endblock %}
+
+{% block content %}
+
+{% if no_table %}
+<div class="empty-state">
+  <p class="text-slate-400 text-sm">No agent/skill data yet.</p>
+  <p class="text-slate-500 text-xs mt-2">Agent and Skill calls will be tracked automatically once you run <code>dev-mem upgrade</code>.</p>
+</div>
+{% else %}
+
+<!-- Summary stats -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+  <div class="stat-card">
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Agent calls</p>
+    <p class="text-3xl font-bold text-violet-400">{{ total_agents }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Skill calls</p>
+    <p class="text-3xl font-bold text-cyan-400">{{ total_skills }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Unique agents</p>
+    <p class="text-3xl font-bold text-slate-300">{{ agents | length }}</p>
+  </div>
+  <div class="stat-card">
+    <p class="text-xs text-slate-400 uppercase tracking-wide mb-1">Unique skills</p>
+    <p class="text-3xl font-bold text-slate-300">{{ skills | length }}</p>
+  </div>
+</div>
+
+<!-- Charts row -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+  <div class="card">
+    <div class="section-header"><span>Top Agents</span><span class="text-slate-500 text-xs">by call count</span></div>
+    {% if agents %}
+    {% set max_n = agents[0].n %}
+    <div class="space-y-2">
+      {% for a in agents %}
+      <div class="flex items-center gap-3">
+        <div class="text-xs text-slate-300 w-40 truncate font-mono">{{ a.name }}</div>
+        <div class="flex-1 bg-slate-800 rounded-full h-2">
+          <div class="bg-violet-500 h-2 rounded-full" style="width: {{ (a.n / max_n * 100)|round|int }}%"></div>
+        </div>
+        <div class="text-xs text-slate-400 w-8 text-right">{{ a.n }}</div>
+        <div class="text-xs text-slate-600 w-24 text-right">{{ (a.last_used or '')[:10] }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-slate-500 text-sm">No agent calls recorded yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="section-header"><span>Top Skills</span><span class="text-slate-500 text-xs">by call count</span></div>
+    {% if skills %}
+    {% set max_s = skills[0].n %}
+    <div class="space-y-2">
+      {% for s in skills %}
+      <div class="flex items-center gap-3">
+        <div class="text-xs text-slate-300 w-40 truncate font-mono">{{ s.name }}</div>
+        <div class="flex-1 bg-slate-800 rounded-full h-2">
+          <div class="bg-cyan-500 h-2 rounded-full" style="width: {{ (s.n / max_s * 100)|round|int }}%"></div>
+        </div>
+        <div class="text-xs text-slate-400 w-8 text-right">{{ s.n }}</div>
+        <div class="text-xs text-slate-600 w-24 text-right">{{ (s.last_used or '')[:10] }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-slate-500 text-sm">No skill calls recorded yet.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Daily trend chart -->
+<div class="card mb-6">
+  <div class="section-header"><span>Daily Activity</span><span class="text-slate-500 text-xs">agents vs skills</span></div>
+  <canvas id="dailyTrendChart" height="80"></canvas>
+</div>
+
+<!-- Project breakdown + recent calls -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+  <!-- Per-project breakdown -->
+  <div class="card">
+    <div class="section-header"><span>By Project</span></div>
+    {% if project_breakdown %}
+    <table class="data-table w-full">
+      <thead><tr>
+        <th>Project</th>
+        <th>Type</th>
+        <th class="text-right">Calls</th>
+      </tr></thead>
+      <tbody>
+        {% for row in project_breakdown %}
+        <tr>
+          <td class="text-slate-300">{{ row.proj }}</td>
+          <td>
+            {% if row.call_type == 'agent' %}
+            <span class="obs-badge obs-feature">agent</span>
+            {% else %}
+            <span class="obs-badge obs-decision">skill</span>
+            {% endif %}
+          </td>
+          <td class="text-right font-mono text-slate-400">{{ row.n }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-slate-500 text-sm">No project data yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Recent invocations -->
+  <div class="card">
+    <div class="section-header"><span>Recent Calls</span></div>
+    {% if recent %}
+    <div class="space-y-2 max-h-96 overflow-y-auto">
+      {% for r in recent %}
+      <div class="flex items-start gap-3 py-2 border-b border-slate-800">
+        <div class="flex-shrink-0 mt-0.5">
+          {% if r.call_type == 'agent' %}
+          <span class="obs-badge obs-feature">agent</span>
+          {% else %}
+          <span class="obs-badge obs-decision">skill</span>
+          {% endif %}
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-xs font-mono text-slate-200 truncate">{{ r.name }}</p>
+          {% if r.description %}
+          <p class="text-xs text-slate-500 truncate mt-0.5">{{ r.description[:120] }}</p>
+          {% elif r.args %}
+          <p class="text-xs text-slate-500 truncate mt-0.5">{{ r.args[:120] }}</p>
+          {% endif %}
+          {% if r.project %}
+          <p class="text-xs text-slate-600 mt-0.5">{{ r.project }}</p>
+          {% endif %}
+        </div>
+        <div class="flex-shrink-0 text-xs text-slate-600 whitespace-nowrap">{{ (r.ts or '')[:16].replace('T',' ') }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-slate-500 text-sm">No calls recorded yet.</p>
+    {% endif %}
+  </div>
+
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if not no_table and daily_trend %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  const raw = {{ daily_trend | tojson }};
+
+  // Build sorted date list
+  const dateSet = new Set(raw.map(r => r.d));
+  const dates = Array.from(dateSet).sort();
+
+  const agentData = {}, skillData = {};
+  dates.forEach(d => { agentData[d] = 0; skillData[d] = 0; });
+  raw.forEach(r => {
+    if (r.call_type === 'agent') agentData[r.d] = (agentData[r.d] || 0) + r.n;
+    else skillData[r.d] = (skillData[r.d] || 0) + r.n;
+  });
+
+  const ctx = document.getElementById('dailyTrendChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: dates,
+      datasets: [
+        {
+          label: 'Agents',
+          data: dates.map(d => agentData[d]),
+          backgroundColor: 'rgba(139,92,246,0.7)',
+          borderRadius: 3,
+        },
+        {
+          label: 'Skills',
+          data: dates.map(d => skillData[d]),
+          backgroundColor: 'rgba(34,211,238,0.7)',
+          borderRadius: 3,
+        },
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+      scales: {
+        x: {
+          stacked: true,
+          ticks: { color: '#64748b', maxRotation: 45, font: { size: 10 } },
+          grid: { color: 'rgba(255,255,255,0.03)' }
+        },
+        y: {
+          stacked: true,
+          ticks: { color: '#64748b', font: { size: 10 } },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        }
+      }
+    }
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

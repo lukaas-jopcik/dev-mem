@@ -750,6 +750,116 @@ def api_obs_stats():
     })
 
 
+@app.route("/skills")
+def skills():
+    days = int(request.args.get("days", 30))
+    start_dt = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    def _has_table(name: str) -> bool:
+        r = _db._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (name,)
+        ).fetchone()
+        return r is not None
+
+    if not _has_table("agent_skill_calls"):
+        return render_template("skills.html", agents=[], skills=[], recent=[],
+                                project_breakdown=[], total_agents=0, total_skills=0,
+                                days=days, no_table=True)
+
+    top_agents = _db._conn.execute(
+        "SELECT name, COUNT(*) AS n, MAX(ts) AS last_used FROM agent_skill_calls "
+        "WHERE call_type='agent' AND ts >= ? GROUP BY name ORDER BY n DESC LIMIT 20",
+        (start_dt,),
+    ).fetchall()
+
+    top_skills = _db._conn.execute(
+        "SELECT name, COUNT(*) AS n, MAX(ts) AS last_used FROM agent_skill_calls "
+        "WHERE call_type='skill' AND ts >= ? GROUP BY name ORDER BY n DESC LIMIT 20",
+        (start_dt,),
+    ).fetchall()
+
+    recent = _db._conn.execute(
+        "SELECT asc.*, p.name AS project_name FROM agent_skill_calls asc "
+        "LEFT JOIN projects p ON asc.project_id = p.id "
+        "WHERE asc.ts >= ? ORDER BY asc.ts DESC LIMIT 50",
+        (start_dt,),
+    ).fetchall()
+
+    project_breakdown = _db._conn.execute(
+        "SELECT COALESCE(p.name, asc.project, 'Unknown') AS proj, "
+        "asc.call_type, COUNT(*) AS n FROM agent_skill_calls asc "
+        "LEFT JOIN projects p ON asc.project_id = p.id "
+        "WHERE asc.ts >= ? GROUP BY proj, asc.call_type ORDER BY n DESC LIMIT 20",
+        (start_dt,),
+    ).fetchall()
+
+    total_agents = _db._conn.execute(
+        "SELECT COUNT(*) AS n FROM agent_skill_calls WHERE call_type='agent' AND ts >= ?",
+        (start_dt,),
+    ).fetchone()["n"]
+    total_skills = _db._conn.execute(
+        "SELECT COUNT(*) AS n FROM agent_skill_calls WHERE call_type='skill' AND ts >= ?",
+        (start_dt,),
+    ).fetchone()["n"]
+
+    # Daily trend
+    daily_trend = _db._conn.execute(
+        "SELECT DATE(ts) AS d, call_type, COUNT(*) AS n FROM agent_skill_calls "
+        "WHERE ts >= ? GROUP BY DATE(ts), call_type ORDER BY d",
+        (start_dt,),
+    ).fetchall()
+
+    return render_template(
+        "skills.html",
+        agents=[dict(r) for r in top_agents],
+        skills=[dict(r) for r in top_skills],
+        recent=[dict(r) for r in recent],
+        project_breakdown=[dict(r) for r in project_breakdown],
+        daily_trend=[dict(r) for r in daily_trend],
+        total_agents=total_agents,
+        total_skills=total_skills,
+        days=days,
+        no_table=False,
+    )
+
+
+@app.route("/api/agent-stats")
+def api_agent_stats():
+    days = int(request.args.get("days", 30))
+    start_dt = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    def _has_table(name: str) -> bool:
+        r = _db._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (name,)
+        ).fetchone()
+        return r is not None
+
+    if not _has_table("agent_skill_calls"):
+        return jsonify({"agents": [], "skills": [], "daily": []})
+
+    agents = _db._conn.execute(
+        "SELECT name, COUNT(*) AS n FROM agent_skill_calls "
+        "WHERE call_type='agent' AND ts >= ? GROUP BY name ORDER BY n DESC LIMIT 15",
+        (start_dt,),
+    ).fetchall()
+    skills_q = _db._conn.execute(
+        "SELECT name, COUNT(*) AS n FROM agent_skill_calls "
+        "WHERE call_type='skill' AND ts >= ? GROUP BY name ORDER BY n DESC LIMIT 15",
+        (start_dt,),
+    ).fetchall()
+    daily = _db._conn.execute(
+        "SELECT DATE(ts) AS d, call_type, COUNT(*) AS n FROM agent_skill_calls "
+        "WHERE ts >= ? GROUP BY DATE(ts), call_type ORDER BY d",
+        (start_dt,),
+    ).fetchall()
+
+    return jsonify({
+        "agents": [{"name": r["name"], "count": r["n"]} for r in agents],
+        "skills": [{"name": r["name"], "count": r["n"]} for r in skills_q],
+        "daily": [{"date": r["d"], "type": r["call_type"], "count": r["n"]} for r in daily],
+    })
+
+
 def run():
     app.run(host="127.0.0.1", port=8888, debug=False, threaded=True)
 
