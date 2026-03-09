@@ -1,7 +1,4 @@
-<h1 align="center">
-  <img src="https://raw.githubusercontent.com/lukaas-jopcik/dev-mem/main/assets/logo.png" width="48" height="48" alt="dev-mem" /><br/>
-  dev-mem
-</h1>
+<h1 align="center">🧠 dev-mem</h1>
 
 <p align="center">
   <strong>Persistent memory for Claude Code.</strong><br/>
