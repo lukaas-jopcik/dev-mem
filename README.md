@@ -1,16 +1,24 @@
-# dev-mem — Persistent Memory for Claude Code
+<h1 align="center">
+  <img src="https://raw.githubusercontent.com/lukaas-jopcik/dev-mem/main/assets/logo.png" width="48" height="48" alt="dev-mem" /><br/>
+  dev-mem
+</h1>
 
-> Claude forgets everything when a session ends. dev-mem fixes that.
+<p align="center">
+  <strong>Persistent memory for Claude Code.</strong><br/>
+  Every session starts with full context — automatically.
+</p>
 
-[![Python](https://img.shields.io/badge/Python-3.10+-3776ab?style=flat-square&logo=python&logoColor=white)](https://python.org)
-[![License](https://img.shields.io/badge/License-MIT-22c55e?style=flat-square)](LICENSE)
-[![PyPI](https://img.shields.io/pypi/v/dev-mem?style=flat-square&logo=pypi&logoColor=white&color=6366f1)](https://pypi.org/project/dev-mem)
-[![Stars](https://img.shields.io/github/stars/lukaas-jopcik/dev-mem?style=flat-square&logo=github&color=f59e0b)](https://github.com/lukaas-jopcik/dev-mem/stargazers)
-[![Issues](https://img.shields.io/github/issues/lukaas-jopcik/dev-mem?style=flat-square&color=64748b)](https://github.com/lukaas-jopcik/dev-mem/issues)
+<p align="center">
+  <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.10+-3776ab?style=flat-square&logo=python&logoColor=white" alt="Python"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat-square" alt="License"></a>
+  <a href="https://pypi.org/project/dev-mem"><img src="https://img.shields.io/pypi/v/dev-mem?style=flat-square&logo=pypi&logoColor=white&color=6366f1" alt="PyPI"></a>
+  <a href="https://github.com/lukaas-jopcik/dev-mem/stargazers"><img src="https://img.shields.io/github/stars/lukaas-jopcik/dev-mem?style=flat-square&logo=github&color=f59e0b" alt="Stars"></a>
+  <a href="https://github.com/lukaas-jopcik/dev-mem/issues"><img src="https://img.shields.io/github/issues/lukaas-jopcik/dev-mem?style=flat-square&color=64748b" alt="Issues"></a>
+</p>
 
 ---
 
-## The problem
+## 🧠 The problem
 
 Every time you open Claude Code, it starts from zero.
 
@@ -27,7 +35,7 @@ Next week: Claude knows your style, your stack, your decisions.
 
 ---
 
-## Token savings
+## 💸 Token savings
 
 Running dev-mem doesn't just save time — it saves tokens.
 
@@ -35,33 +43,33 @@ Instead of re-explaining ~600 tokens of project context every session, dev-mem i
 
 ```
 Per session saved (estimated):
-  Manual re-explanation      ~600 tokens
-  Clarifying rounds avoided  ~400 tokens
+  Manual re-explanation       ~600 tokens
+  Clarifying rounds avoided   ~400 tokens
   Context injected by dev-mem ~450 tokens
-  ─────────────────────────────────────
-  Net saving                 ~550 tokens / session
+  ──────────────────────────────────────
+  Net saving                  ~550 tokens / session
 ```
 
 The dashboard includes a **Token Savings** page with real measurements — actual injection size vs. estimated manual cost, per session, over time.
 
 ---
 
-## What it does
+## ✨ What it does
 
 dev-mem runs silently via Claude Code hooks. Every session, every tool call, every decision — tracked automatically. No commands to remember.
 
-**Session memory**
+**🔁 Session memory**
 - Injects the last 2 session summaries + recent learnings at every session start
 - Survives context window resets via the `PreCompact` hook — no continuity loss
 - Per-project context — different projects, different memory
 
-**Automatic learning extraction**
+**🎓 Automatic learning extraction**
 - Bugfixes → `mistake` learnings ("don't do X in Y context")
 - Decisions → `insight` learnings ("we chose Z because")
 - Refactors → `tip` learnings
 - Filters noise — skips trivial bash commands, file listings, JSON blobs
 
-**What gets injected** (max 2500 chars, ~625 tokens):
+**📦 What gets injected** (max 2500 chars, ~625 tokens):
 
 ```xml
 <dev-mem-context project="my-app" generated="2026-03-09T...">
@@ -78,24 +86,24 @@ dev-mem runs silently via Claude Code hooks. Every session, every tool call, eve
 </dev-mem-context>
 ```
 
-**Web dashboard** — `dev-mem web` → http://localhost:8888
+**📊 Web dashboard** — `dev-mem web` → http://localhost:8888
 
 | Page | What you see |
 |------|-------------|
-| Home | Today's stats, live observation feed |
-| Projects | Health score, obs breakdown, activity per project |
-| Memory | Searchable observation browser |
-| Analytics | Daily activity, type distribution, hourly heatmap |
-| Token Savings | Actual injection size vs. manual cost, per session |
-| Skills & Agents | Which Claude agents/skills you use + full plugin catalog |
-| System Map | Interactive architecture diagram + your installed plugins |
-| Daily | Day view, observations grouped by project |
+| 🏠 Home | Today's stats, live observation feed |
+| 📁 Projects | Health score, obs breakdown, activity per project |
+| 🧩 Memory | Searchable observation browser |
+| 📈 Analytics | Daily activity, type distribution, hourly heatmap |
+| 💸 Token Savings | Actual injection size vs. manual cost, per session |
+| 🤖 Skills & Agents | Which Claude agents/skills you use + full plugin catalog |
+| 🗺️ System Map | Interactive architecture diagram + your installed plugins |
+| 📅 Daily | Day view, observations grouped by project |
 
-**MCP tools** (available inside Claude Code via `save_memory`, `search`, `timeline`, `get_observations`)
+**🔌 MCP tools** — available inside Claude Code: `save_memory`, `search`, `timeline`, `get_observations`
 
 ---
 
-## Install
+## 🚀 Install
 
 ```bash
 git clone https://github.com/lukaas-jopcik/dev-mem.git
@@ -114,7 +122,7 @@ dev-mem install-claude   # Claude Code hooks + MCP server
 
 ---
 
-## How it works
+## ⚙️ How it works
 
 ```
 Claude Code session
@@ -143,7 +151,7 @@ Claude Code session
 
 ---
 
-## Claude Code config
+## 🔧 Claude Code config
 
 `dev-mem install-claude` writes this to `~/.claude/settings.json`:
 
@@ -163,7 +171,7 @@ Claude Code session
 
 ---
 
-## CLI
+## 🖥️ CLI
 
 ```
 dev-mem install-claude   Configure Claude Code hooks + MCP server
@@ -180,7 +188,7 @@ dev-mem export           Export data as JSON / CSV / Markdown
 
 ---
 
-## Requirements
+## 📋 Requirements
 
 - Python 3.10+
 - Claude Code
@@ -189,7 +197,7 @@ dev-mem export           Export data as JSON / CSV / Markdown
 
 ---
 
-## Privacy
+## 🔒 Privacy
 
 All local. All yours.
 
@@ -201,7 +209,7 @@ All local. All yours.
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
 1. Fork and create a feature branch
 2. `pip install -e ".[dev]"`
@@ -213,7 +221,7 @@ Issues welcome. Open one before large changes.
 
 ---
 
-## Roadmap
+## 🗺️ Roadmap
 
 - [x] Session memory with automatic context injection
 - [x] Automatic learning extraction (bugfix / decision / refactor)
@@ -229,7 +237,7 @@ Issues welcome. Open one before large changes.
 
 ---
 
-## Star history
+## ⭐ Star history
 
 <a href="https://www.star-history.com/?repos=lukaas-jopcik%2Fdev-mem&type=date&logscale=&legend=top-left">
   <picture>
@@ -241,10 +249,12 @@ Issues welcome. Open one before large changes.
 
 ---
 
-## License
+## 📄 License
 
 MIT — see [LICENSE](LICENSE).
 
 ---
 
-**If this saves you context-reset frustration, drop a star.**
+<p align="center">
+  <strong>If this saves you context-reset frustration, drop a star. ⭐</strong>
+</p>
