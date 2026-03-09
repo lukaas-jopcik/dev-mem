@@ -750,6 +750,69 @@ def api_obs_stats():
     })
 
 
+def _read_claude_config() -> dict:
+    """Read ~/.claude/settings.json and ~/.claude/ structure for the config page."""
+    import os
+    import subprocess
+
+    claude_dir = Path.home() / ".claude"
+    result: dict = {
+        "hooks": {},
+        "mcp_servers": {},
+        "enabled_plugins": {},
+        "installed_skills": [],
+        "custom_commands": [],
+        "installed_plugins_detail": [],
+        "settings_path": str(claude_dir / "settings.json"),
+        "error": None,
+    }
+
+    # --- settings.json ---
+    settings_path = claude_dir / "settings.json"
+    if settings_path.exists():
+        try:
+            cfg = json.loads(settings_path.read_text())
+            result["hooks"] = cfg.get("hooks", {})
+            result["mcp_servers"] = cfg.get("mcpServers", {})
+            result["enabled_plugins"] = {
+                k: v for k, v in cfg.get("enabledPlugins", {}).items() if v
+            }
+        except Exception as exc:
+            result["error"] = str(exc)
+
+    # --- installed skills ---
+    skills_dir = claude_dir / "skills"
+    if skills_dir.is_dir():
+        result["installed_skills"] = sorted(p.name for p in skills_dir.iterdir() if p.is_dir())
+
+    # --- custom commands ---
+    commands_dir = claude_dir / "commands"
+    if commands_dir.is_dir():
+        result["custom_commands"] = sorted(
+            p.stem for p in commands_dir.iterdir()
+            if p.suffix in (".md", ".txt") and p.stem != "README"
+        )
+
+    # --- installed plugins detail ---
+    plugins_json = claude_dir / "plugins" / "installed_plugins.json"
+    if plugins_json.exists():
+        try:
+            pdata = json.loads(plugins_json.read_text())
+            for plugin_id, entries in pdata.get("plugins", {}).items():
+                if not isinstance(entries, list) or not entries:
+                    continue
+                entry = entries[0]
+                result["installed_plugins_detail"].append({
+                    "id": plugin_id,
+                    "scope": entry.get("scope", ""),
+                    "enabled": plugin_id.split("@")[0] in " ".join(result["enabled_plugins"].keys()),
+                })
+        except Exception:
+            pass
+
+    return result
+
+
 @app.route("/skills")
 def skills():
     days = int(request.args.get("days", 30))
@@ -764,7 +827,8 @@ def skills():
     if not _has_table("agent_skill_calls"):
         return render_template("skills.html", agents=[], skills=[], recent=[],
                                 project_breakdown=[], total_agents=0, total_skills=0,
-                                days=days, no_table=True)
+                                days=days, no_table=True,
+                                claude_config=_read_claude_config())
 
     top_agents = _db._conn.execute(
         "SELECT name, COUNT(*) AS n, MAX(ts) AS last_used FROM agent_skill_calls "
@@ -809,6 +873,8 @@ def skills():
         (start_dt,),
     ).fetchall()
 
+    claude_config = _read_claude_config()
+
     return render_template(
         "skills.html",
         agents=[dict(r) for r in top_agents],
@@ -820,6 +886,7 @@ def skills():
         total_skills=total_skills,
         days=days,
         no_table=False,
+        claude_config=claude_config,
     )
 
 
