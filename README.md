@@ -3,8 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Persistent memory for Claude Code.</strong><br/>
-  Every session starts with full context — automatically.
+  Claude forgets everything when a session ends. dev-mem fixes that.
 </p>
 
 <p align="center">
@@ -19,56 +18,53 @@
 
 ## 🧠 The problem
 
-Every time you open Claude Code, it starts from zero.
+You open Claude Code. It has no idea what you were working on yesterday. You paste your stack, your conventions, what you decided last week. Again. Every session.
 
-No memory of your project. No memory of decisions you already made. No memory of bugs you already fixed. You spend the first five minutes re-explaining context that should just be there.
-
-**dev-mem gives Claude a brain that persists.**
+dev-mem hooks into Claude Code and injects the last sessions, recent decisions, and extracted learnings at startup — automatically. No prompts, no setup per session, no copy-pasting.
 
 ```
 Monday:    "We're using Drizzle ORM, no raw SQL. Auth is Better Auth."
 Tuesday:   Claude already knows.
 Friday:    Claude remembers you fixed that Prisma migration issue on Wednesday.
-Next week: Claude knows your style, your stack, your decisions.
+Next week: Same context, zero re-explaining.
 ```
 
 ---
 
 ## 💸 Token savings
 
-Running dev-mem doesn't just save time — it saves tokens.
+Every session you manually re-explain context costs ~600 tokens. Add 1–2 clarifying questions Claude asks without it — another ~400. That's ~1000 tokens gone before you write a single line.
 
-Instead of re-explaining ~600 tokens of project context every session, dev-mem injects a compact structured summary. Across sessions, this compounds.
+dev-mem injects a compact summary (~450 tokens). Net saving: **~550 tokens per session**.
 
 ```
-Per session saved (estimated):
-  Manual re-explanation       ~600 tokens
-  Clarifying rounds avoided   ~400 tokens
-  Context injected by dev-mem ~450 tokens
-  ──────────────────────────────────────
-  Net saving                  ~550 tokens / session
+Manual re-explanation       ~600 tokens
+Clarifying rounds avoided   ~400 tokens
+Context injected by dev-mem ~450 tokens
+──────────────────────────────────────
+Net saving                  ~550 tokens / session
 ```
 
-The dashboard includes a **Token Savings** page with real measurements — actual injection size vs. estimated manual cost, per session, over time.
+The dashboard has a Token Savings page that tracks this for real — actual injection size vs. estimated manual cost, day by day.
 
 ---
 
 ## ✨ What it does
 
-dev-mem runs silently via Claude Code hooks. Every session, every tool call, every decision — tracked automatically. No commands to remember.
+Hooks into Claude Code via `SessionStart`, `PostToolUse`, `PreCompact`, and `Stop`. Runs in the background, stores observations to a local SQLite DB, and injects context at the start of each session.
 
 **🔁 Session memory**
-- Injects the last 2 session summaries + recent learnings at every session start
-- Survives context window resets via the `PreCompact` hook — no continuity loss
-- Per-project context — different projects, different memory
+- Last 2 session summaries + recent learnings injected at startup
+- `PreCompact` hook keeps continuity when the context window resets mid-session
+- Per-project — open a different repo, get different context
 
-**🎓 Automatic learning extraction**
-- Bugfixes → `mistake` learnings ("don't do X in Y context")
-- Decisions → `insight` learnings ("we chose Z because")
-- Refactors → `tip` learnings
-- Filters noise — skips trivial bash commands, file listings, JSON blobs
+**🎓 Learning extraction**
+- Bugfixes → `mistake` ("don't do X in Y context")
+- Decisions → `insight` ("we went with Z because")
+- Refactors → `tip`
+- Noise filtered — skips file listings, raw bash one-liners, JSON blobs
 
-**📦 What gets injected** (max 2500 chars, ~625 tokens):
+**📦 What Claude sees at session start** (max ~625 tokens):
 
 ```xml
 <dev-mem-context project="my-app" generated="2026-03-09T...">
@@ -98,7 +94,7 @@ dev-mem runs silently via Claude Code hooks. Every session, every tool call, eve
 | 🗺️ System Map | Interactive architecture diagram + your installed plugins |
 | 📅 Daily | Day view, observations grouped by project |
 
-**🔌 MCP tools** — available inside Claude Code: `save_memory`, `search`, `timeline`, `get_observations`
+**🔌 MCP tools** — `save_memory`, `search`, `timeline`, `get_observations` — callable from inside Claude Code
 
 ---
 
@@ -110,13 +106,13 @@ cd dev-mem
 bash setup.sh
 ```
 
-`setup.sh` installs the package, runs migrations, installs shell hooks, and configures Claude Code. Then restart Claude Code — memory starts working immediately.
+Installs the package, runs migrations, registers hooks, configures Claude Code. Restart Claude Code — that's it.
 
 **Or from PyPI:**
 
 ```bash
 pip install dev-mem
-dev-mem install-claude   # Claude Code hooks + MCP server
+dev-mem install-claude
 ```
 
 ---
@@ -198,13 +194,13 @@ dev-mem export           Export data as JSON / CSV / Markdown
 
 ## 🔒 Privacy
 
-All local. All yours.
+Everything stays local.
 
-- **No telemetry.** No analytics, no network calls, no external APIs.
-- **SQLite only.** Everything at `~/.dev-mem/mem.db`.
-- **Secret filtering.** Commands scanned for tokens, passwords, API keys before storage.
-- **Full export.** `dev-mem export` gives you JSON, CSV, or Markdown.
-- **Clean uninstall.** `dev-mem rollback-hooks` removes everything instantly.
+- No telemetry, no network calls, no external APIs
+- SQLite only — `~/.dev-mem/mem.db`
+- Commands are scanned for tokens, passwords, and API keys before storage
+- `dev-mem export` — full dump as JSON, CSV, or Markdown
+- `dev-mem rollback-hooks` — clean uninstall
 
 ---
 
@@ -214,9 +210,9 @@ All local. All yours.
 2. `pip install -e ".[dev]"`
 3. `pytest --cov=dev_mem`
 4. `black . && ruff check .`
-5. Open a PR — describe what and why
+5. Open a PR
 
-Issues welcome. Open one before large changes.
+Open an issue before large changes.
 
 ---
 
@@ -255,5 +251,5 @@ MIT — see [LICENSE](LICENSE).
 ---
 
 <p align="center">
-  <strong>If this saves you context-reset frustration, drop a star. ⭐</strong>
+  If this saves you context-reset frustration, drop a star. ⭐
 </p>
