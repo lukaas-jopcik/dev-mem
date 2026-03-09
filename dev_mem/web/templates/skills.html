@@ -166,48 +166,42 @@
 <!-- ── Claude Setup ────────────────────────────────────── -->
 <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wide mt-8 mb-4">Claude Setup</h2>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
+{% set used_agent_names = agents | map(attribute='name') | list %}
+{% set used_skill_names = skills | map(attribute='name') | list %}
+
+<!-- Hooks + MCP + Plugins row -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
 
   <!-- Hooks -->
   <div class="card">
-    <div class="section-header"><span>Active Hooks</span></div>
-    {% set hooks = claude_config.hooks %}
-    {% if hooks %}
-    <div class="space-y-1.5">
-      {% for event, entries in hooks.items() %}
-      <div class="flex items-start gap-2">
-        <span class="obs-badge obs-decision flex-shrink-0 mt-0.5">{{ event }}</span>
-        <div class="text-xs text-slate-400 font-mono leading-relaxed">
-          {% for entry in entries %}
-          {% for h in entry.get('hooks', []) %}
-          <div class="truncate">{{ h.get('command','') }}</div>
-          {% endfor %}
-          {% endfor %}
-        </div>
+    <div class="section-header"><span>Active Hooks</span><span class="text-slate-500 text-xs">{{ claude_config.hooks | length }}</span></div>
+    {% if claude_config.hooks %}
+    <div class="space-y-2">
+      {% for event, entries in claude_config.hooks.items() %}
+      <div>
+        <span class="obs-badge obs-decision">{{ event }}</span>
+        {% for entry in entries %}{% for h in entry.get('hooks', []) %}
+        <p class="text-xs text-slate-500 font-mono mt-0.5 truncate pl-1">{{ h.get('command','') }}</p>
+        {% endfor %}{% endfor %}
       </div>
       {% endfor %}
     </div>
     {% else %}
-    <p class="text-slate-500 text-sm">No hooks configured.<br>
-      <span class="text-xs">Run <code class="bg-slate-800 px-1 rounded">dev-mem install-claude</code></span></p>
+    <p class="text-slate-500 text-sm">No hooks. Run <code class="bg-slate-800 px-1 rounded">dev-mem install-claude</code></p>
     {% endif %}
   </div>
 
   <!-- MCP Servers -->
   <div class="card">
-    <div class="section-header"><span>MCP Servers</span></div>
-    {% set mcps = claude_config.mcp_servers %}
-    {% if mcps %}
+    <div class="section-header"><span>MCP Servers</span><span class="text-slate-500 text-xs">{{ claude_config.mcp_servers | length }}</span></div>
+    {% if claude_config.mcp_servers %}
     <div class="space-y-2">
-      {% for name, cfg in mcps.items() %}
+      {% for name, cfg in claude_config.mcp_servers.items() %}
       <div class="flex items-start gap-2">
-        <span class="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0 mt-1.5"></span>
+        <span class="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0 mt-1"></span>
         <div>
           <p class="text-xs font-semibold text-slate-200">{{ name }}</p>
-          <p class="text-xs text-slate-500 font-mono">
-            {{ cfg.get('command','') }}
-            {% if cfg.get('args') %}{{ cfg.args | join(' ') }}{% endif %}
-          </p>
+          <p class="text-xs text-slate-500 font-mono">{{ cfg.get('command','') }}{% if cfg.get('args') %} {{ cfg.args | join(' ') }}{% endif %}</p>
         </div>
       </div>
       {% endfor %}
@@ -219,63 +213,119 @@
 
   <!-- Plugins -->
   <div class="card">
-    <div class="section-header"><span>Plugins</span><span class="text-slate-500 text-xs">{{ claude_config.installed_plugins_detail | length }} installed</span></div>
-    {% if claude_config.installed_plugins_detail %}
-    <div class="space-y-1.5 max-h-48 overflow-y-auto">
+    <div class="section-header"><span>Plugins</span><span class="text-slate-500 text-xs">{{ claude_config.installed_plugins_detail | length }}</span></div>
+    <div class="space-y-1.5">
       {% for p in claude_config.installed_plugins_detail %}
       <div class="flex items-center gap-2">
         <span class="w-1.5 h-1.5 rounded-full flex-shrink-0 {% if p.enabled %}bg-emerald-500{% else %}bg-slate-600{% endif %}"></span>
-        <span class="text-xs text-slate-300 truncate flex-1">{{ p.id.split('@')[0] }}</span>
+        <span class="text-xs {% if p.enabled %}text-slate-200{% else %}text-slate-500{% endif %} truncate flex-1">{{ p.id.split('@')[0] }}</span>
         <span class="text-xs text-slate-600">{{ p.scope }}</span>
       </div>
       {% endfor %}
     </div>
-    {% else %}
-    <p class="text-slate-500 text-sm">No plugins installed.</p>
-    {% endif %}
   </div>
 
 </div>
 
-<!-- Skills + Commands -->
+<!-- Agents full listing -->
+<div class="card mb-6">
+  <div class="section-header">
+    <span>All Agents</span>
+    <span class="text-slate-500 text-xs">{{ claude_config.builtin_agents | length }} built-in + {{ claude_config.plugin_agents | length }} from plugins</span>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+
+    <!-- Built-in agents -->
+    {% for a in claude_config.builtin_agents %}
+    {% set used_count = (agents | selectattr('name', 'equalto', a.id) | list | first) %}
+    <div class="flex items-start gap-2 p-2 rounded-lg border {% if used_count %}border-violet-700 bg-violet-950/30{% else %}border-slate-800 bg-slate-900/50{% endif %}">
+      <span class="text-base flex-shrink-0">🤖</span>
+      <div class="min-w-0">
+        <p class="text-xs font-semibold font-mono {% if used_count %}text-violet-300{% else %}text-slate-300{% endif %} truncate">{{ a.id }}</p>
+        <p class="text-xs text-slate-500 mt-0.5 leading-snug">{{ a.desc }}</p>
+        {% if used_count %}<p class="text-xs text-violet-400 mt-0.5">Used {{ used_count.n }}×</p>{% endif %}
+        <span class="text-xs text-slate-600">built-in</span>
+      </div>
+    </div>
+    {% endfor %}
+
+    <!-- Plugin agents -->
+    {% for a in claude_config.plugin_agents %}
+    {% set used_count = (agents | selectattr('name', 'equalto', a.id) | list | first) %}
+    <div class="flex items-start gap-2 p-2 rounded-lg border {% if used_count %}border-violet-700 bg-violet-950/30{% elif a.enabled %}border-slate-700{% else %}border-slate-800 opacity-50{% endif %}">
+      <span class="text-base flex-shrink-0">{% if a.enabled %}🟣{% else %}⚫{% endif %}</span>
+      <div class="min-w-0">
+        <p class="text-xs font-semibold font-mono {% if used_count %}text-violet-300{% elif a.enabled %}text-slate-200{% else %}text-slate-500{% endif %} truncate">{{ a.id }}</p>
+        <p class="text-xs text-slate-600 mt-0.5">{{ a.plugin }}</p>
+        {% if used_count %}<p class="text-xs text-violet-400 mt-0.5">Used {{ used_count.n }}×</p>{% endif %}
+        {% if not a.enabled %}<span class="text-xs text-slate-600">plugin disabled</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+
+  </div>
+</div>
+
+<!-- Plugin Commands -->
+<div class="card mb-6">
+  <div class="section-header">
+    <span>Plugin Commands</span>
+    <span class="text-slate-500 text-xs">{{ claude_config.plugin_commands | length }} from plugins · {{ claude_config.custom_commands | length }} custom</span>
+  </div>
+  <div class="flex flex-wrap gap-1.5 mb-3">
+    {% for c in claude_config.plugin_commands %}
+    <span class="text-xs font-mono px-2 py-0.5 rounded border
+      {% if c.enabled %}bg-slate-800 border-slate-700 text-slate-300{% else %}bg-slate-900 border-slate-800 text-slate-600{% endif %}">
+      /{{ c.id }}
+    </span>
+    {% endfor %}
+  </div>
+  {% if claude_config.custom_commands %}
+  <p class="text-xs text-slate-500 mb-1.5">Custom (~/.claude/commands/)</p>
+  <div class="flex flex-wrap gap-1.5">
+    {% for cmd in claude_config.custom_commands %}
+    <span class="text-xs font-mono px-2 py-0.5 rounded border border-amber-800 bg-amber-950/30 text-amber-300">/{{ cmd }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- Skills: installed + plugin -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
 
-  <!-- Installed skills -->
+  <!-- User-installed skills (~/.claude/skills/) -->
   <div class="card">
     <div class="section-header">
-      <span>Installed Skills</span>
-      <span class="text-slate-500 text-xs">{{ claude_config.installed_skills | length }} total</span>
+      <span>User Skills</span>
+      <span class="text-slate-500 text-xs">~/.claude/skills/ · {{ claude_config.installed_skills | length }}</span>
     </div>
-    {% if claude_config.installed_skills %}
-    <div class="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
+    <div class="flex flex-wrap gap-1.5 max-h-52 overflow-y-auto">
       {% for s in claude_config.installed_skills %}
-      <span class="text-xs bg-slate-800 text-slate-300 border border-slate-700 rounded px-2 py-0.5 font-mono
-        {% if skills and (s in (skills | map(attribute='name') | list)) %}border-cyan-700 text-cyan-300{% endif %}">
+      {% set used = s in used_skill_names %}
+      <span class="text-xs font-mono px-2 py-0.5 rounded border
+        {% if used %}border-cyan-700 bg-cyan-950/30 text-cyan-300{% else %}border-slate-700 bg-slate-800 text-slate-400{% endif %}">
         {{ s }}
       </span>
       {% endfor %}
     </div>
-    <p class="text-xs text-slate-600 mt-2">Cyan = used in last {{ days }} days</p>
-    {% else %}
-    <p class="text-slate-500 text-sm">No skills found in ~/.claude/skills/</p>
-    {% endif %}
+    <p class="text-xs text-slate-600 mt-2">Cyan = used in last {{ days }}d</p>
   </div>
 
-  <!-- Custom commands -->
+  <!-- Plugin skills -->
   <div class="card">
     <div class="section-header">
-      <span>Custom Commands</span>
-      <span class="text-slate-500 text-xs">{{ claude_config.custom_commands | length }} total</span>
+      <span>Plugin Skills</span>
+      <span class="text-slate-500 text-xs">{{ claude_config.plugin_skills | length }}</span>
     </div>
-    {% if claude_config.custom_commands %}
-    <div class="flex flex-wrap gap-1.5">
-      {% for cmd in claude_config.custom_commands %}
-      <span class="text-xs bg-slate-800 text-slate-300 border border-slate-700 rounded px-2 py-0.5 font-mono">/{{ cmd }}</span>
+    <div class="flex flex-wrap gap-1.5 max-h-52 overflow-y-auto">
+      {% for s in claude_config.plugin_skills %}
+      <span class="text-xs font-mono px-2 py-0.5 rounded border
+        {% if s.enabled %}border-slate-700 bg-slate-800 text-slate-300{% else %}border-slate-800 bg-slate-900 text-slate-600{% endif %}">
+        {{ s.plugin }}:{{ s.name }}
+      </span>
       {% endfor %}
     </div>
-    {% else %}
-    <p class="text-slate-500 text-sm">No custom commands in ~/.claude/commands/</p>
-    {% endif %}
   </div>
 
 </div>

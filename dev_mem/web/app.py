@@ -793,7 +793,78 @@ def _read_claude_config() -> dict:
             if p.suffix in (".md", ".txt") and p.stem != "README"
         )
 
-    # --- installed plugins detail ---
+    # --- installed plugins detail + agents/commands from manifests ---
+    plugins_cache = claude_dir / "plugins" / "cache"
+    plugin_agents: list[dict] = []
+    plugin_commands: list[dict] = []
+    plugin_skills: list[dict] = []
+
+    enabled_plugin_names = {k.split("@")[0] for k in result["enabled_plugins"].keys()}
+
+    if plugins_cache.is_dir():
+        for marketplace_dir in plugins_cache.iterdir():
+            if not marketplace_dir.is_dir():
+                continue
+            for plugin_dir in sorted(marketplace_dir.iterdir()):
+                if not plugin_dir.is_dir():
+                    continue
+                # find latest version
+                versions = sorted(
+                    [v for v in plugin_dir.iterdir() if v.is_dir()],
+                    key=lambda p: p.name
+                )
+                if not versions:
+                    continue
+                latest = versions[-1]
+                manifest = latest / ".claude-plugin" / "plugin.json"
+                if not manifest.exists():
+                    continue
+                try:
+                    m = json.loads(manifest.read_text())
+                    pname = m.get("name", plugin_dir.name)
+                    pdesc = m.get("description", "")
+                    enabled = pname in enabled_plugin_names
+
+                    for a in m.get("agents", []):
+                        stem = Path(a).stem if isinstance(a, str) else str(a)
+                        plugin_agents.append({
+                            "id": f"{pname}:{stem}",
+                            "plugin": pname,
+                            "name": stem,
+                            "enabled": enabled,
+                        })
+                    for c in m.get("commands", []):
+                        stem = Path(c).stem if isinstance(c, str) else str(c)
+                        plugin_commands.append({
+                            "id": f"{pname}:{stem}",
+                            "plugin": pname,
+                            "name": stem,
+                            "enabled": enabled,
+                        })
+                    for s in m.get("skills", []):
+                        sname = Path(s).name if isinstance(s, str) else str(s)
+                        plugin_skills.append({
+                            "id": f"{pname}:{sname}",
+                            "plugin": pname,
+                            "name": sname,
+                            "enabled": enabled,
+                        })
+                except Exception:
+                    pass
+
+    result["plugin_agents"] = plugin_agents
+    result["plugin_commands"] = plugin_commands
+    result["plugin_skills"] = plugin_skills
+
+    # Built-in agent types (always available)
+    result["builtin_agents"] = [
+        {"id": "general-purpose", "desc": "Default agent for complex multi-step tasks"},
+        {"id": "Explore",         "desc": "Fast codebase exploration and search"},
+        {"id": "Plan",            "desc": "Software architect — implementation plans"},
+        {"id": "claude-code-guide","desc": "Claude Code / API / SDK questions"},
+    ]
+
+    # --- installed plugins list ---
     plugins_json = claude_dir / "plugins" / "installed_plugins.json"
     if plugins_json.exists():
         try:
@@ -805,7 +876,7 @@ def _read_claude_config() -> dict:
                 result["installed_plugins_detail"].append({
                     "id": plugin_id,
                     "scope": entry.get("scope", ""),
-                    "enabled": plugin_id.split("@")[0] in " ".join(result["enabled_plugins"].keys()),
+                    "enabled": plugin_id.split("@")[0] in enabled_plugin_names,
                 })
         except Exception:
             pass
