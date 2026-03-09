@@ -1,4 +1,6 @@
-<h1 align="center">🧠 dev-mem</h1>
+<p align="center">
+  <img src="assets/banner.png" alt="dev-mem — Personal Developer Memory System" />
+</p>
 
 <p align="center">
   <strong>Persistent memory for Claude Code.</strong><br/>
