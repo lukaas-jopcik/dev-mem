@@ -961,6 +961,44 @@ def skills():
     )
 
 
+@app.route("/api/claude-config")
+def api_claude_config():
+    """Return full Claude setup as JSON — used by the dynamic System Map."""
+    cfg = _read_claude_config()
+
+    # Add usage counts for agents from agent_skill_calls
+    usage: dict[str, int] = {}
+    try:
+        rows = _db._conn.execute(
+            "SELECT name, COUNT(*) AS n FROM agent_skill_calls "
+            "WHERE call_type='agent' GROUP BY name"
+        ).fetchall()
+        usage = {r["name"]: r["n"] for r in rows}
+    except Exception:
+        pass
+
+    # Annotate builtin agents with usage
+    for a in cfg["builtin_agents"]:
+        a["usage"] = usage.get(a["id"], 0)
+    for a in cfg["plugin_agents"]:
+        a["usage"] = usage.get(a["id"], 0)
+
+    # Skill usage
+    skill_usage: dict[str, int] = {}
+    try:
+        rows = _db._conn.execute(
+            "SELECT name, COUNT(*) AS n FROM agent_skill_calls "
+            "WHERE call_type='skill' GROUP BY name"
+        ).fetchall()
+        skill_usage = {r["name"]: r["n"] for r in rows}
+    except Exception:
+        pass
+    for s in cfg["plugin_skills"]:
+        s["usage"] = skill_usage.get(s["name"], 0) + skill_usage.get(s["id"], 0)
+
+    return jsonify(cfg)
+
+
 @app.route("/map")
 def system_map():
     return render_template("map.html")
