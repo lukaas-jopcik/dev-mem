@@ -216,57 +216,152 @@ def build_context(analysis_type: str, db_path: Path, project: Optional[str]) -> 
         import sqlite3
 
         with sqlite3.connect(str(db_path)) as conn:
+            conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
-            if analysis_type in ("today", "project", "errors"):
+            if analysis_type in ("today", "project"):
+                # Commands in last 24h
                 cur.execute(
-                    "SELECT timestamp, event_type, summary FROM events "
-                    "WHERE DATE(timestamp) = DATE('now') "
-                    "ORDER BY timestamp DESC LIMIT 200"
+                    "SELECT ts, cmd, exit_code, duration_ms FROM commands "
+                    "WHERE DATE(ts) = DATE('now') "
+                    "ORDER BY ts DESC LIMIT 100"
                 )
                 rows = cur.fetchall()
-                lines.append(f"Events today ({len(rows)}):")
-                for ts, etype, summary in rows:
-                    lines.append(f"  [{ts}] {etype}: {summary}")
+                lines.append(f"Commands today ({len(rows)}):")
+                for r in rows:
+                    lines.append(f"  [{r['ts']}] {r['cmd']} (exit={r['exit_code']})")
+
+                # Git events today
+                cur.execute(
+                    "SELECT ts, hash, message FROM git_events "
+                    "WHERE DATE(ts) = DATE('now') "
+                    "ORDER BY ts DESC LIMIT 50"
+                )
+                rows = cur.fetchall()
+                lines.append(f"\nGit commits today ({len(rows)}):")
+                for r in rows:
+                    lines.append(f"  [{r['ts']}] {r['hash'][:8]} {r['message'][:100]}")
+
+                # Claude sessions today
+                cur.execute(
+                    "SELECT ts, tool, input_summary FROM claude_sessions "
+                    "WHERE DATE(ts) = DATE('now') "
+                    "ORDER BY ts DESC LIMIT 50"
+                )
+                rows = cur.fetchall()
+                lines.append(f"\nClaude sessions today ({len(rows)}):")
+                for r in rows:
+                    lines.append(f"  [{r['ts']}] [{r['tool']}] {(r['input_summary'] or '')[:200]}")
+
+                # Errors today
+                cur.execute(
+                    "SELECT last_seen, error_text, count FROM errors "
+                    "WHERE DATE(last_seen) = DATE('now') "
+                    "ORDER BY count DESC LIMIT 20"
+                )
+                rows = cur.fetchall()
+                lines.append(f"\nErrors today ({len(rows)}):")
+                for r in rows:
+                    lines.append(f"  [{r['last_seen']}] (x{r['count']}) {r['error_text'][:150]}")
+
+                # Learnings today
+                cur.execute(
+                    "SELECT ts, text, type FROM learnings "
+                    "WHERE DATE(ts) = DATE('now') "
+                    "ORDER BY ts DESC LIMIT 20"
+                )
+                rows = cur.fetchall()
+                lines.append(f"\nLearnings today ({len(rows)}):")
+                for r in rows:
+                    lines.append(f"  [{r['ts']}] [{r['type']}] {r['text'][:200]}")
+
+            elif analysis_type == "errors":
+                cur.execute(
+                    "SELECT last_seen, error_text, count FROM errors "
+                    "ORDER BY count DESC LIMIT 100"
+                )
+                rows = cur.fetchall()
+                lines.append(f"All errors ({len(rows)}):")
+                for r in rows:
+                    lines.append(f"  [{r['last_seen']}] (x{r['count']}) {r['error_text'][:200]}")
 
             elif analysis_type == "week":
+                # Commands last 7 days grouped by day
                 cur.execute(
-                    "SELECT DATE(timestamp) as day, event_type, COUNT(*) "
-                    "FROM events WHERE timestamp >= DATE('now', '-7 days') "
-                    "GROUP BY day, event_type ORDER BY day DESC"
+                    "SELECT DATE(ts) AS day, COUNT(*) AS n FROM commands "
+                    "WHERE ts >= DATE('now', '-7 days') GROUP BY day ORDER BY day DESC"
                 )
                 rows = cur.fetchall()
-                lines.append("Events last 7 days (by day + type):")
-                for day, etype, cnt in rows:
-                    lines.append(f"  {day}  {etype}: {cnt}")
+                lines.append("Commands last 7 days (by day):")
+                for r in rows:
+                    lines.append(f"  {r['day']}: {r['n']} commands")
+
+                # Git events last 7 days
+                cur.execute(
+                    "SELECT DATE(ts) AS day, COUNT(*) AS n FROM git_events "
+                    "WHERE ts >= DATE('now', '-7 days') GROUP BY day ORDER BY day DESC"
+                )
+                rows = cur.fetchall()
+                lines.append("\nGit commits last 7 days (by day):")
+                for r in rows:
+                    lines.append(f"  {r['day']}: {r['n']} commits")
+
+                # Claude sessions last 7 days
+                cur.execute(
+                    "SELECT DATE(ts) AS day, COUNT(*) AS n FROM claude_sessions "
+                    "WHERE ts >= DATE('now', '-7 days') GROUP BY day ORDER BY day DESC"
+                )
+                rows = cur.fetchall()
+                lines.append("\nClaude sessions last 7 days (by day):")
+                for r in rows:
+                    lines.append(f"  {r['day']}: {r['n']} sessions")
+
+                # Learnings last 7 days
+                cur.execute(
+                    "SELECT ts, text, type FROM learnings "
+                    "WHERE ts >= DATE('now', '-7 days') ORDER BY ts DESC LIMIT 50"
+                )
+                rows = cur.fetchall()
+                lines.append(f"\nLearnings this week ({len(rows)}):")
+                for r in rows:
+                    lines.append(f"  [{r['ts']}] [{r['type']}] {r['text'][:200]}")
 
             elif analysis_type == "prompts":
                 cur.execute(
-                    "SELECT timestamp, prompt_text FROM claude_sessions "
-                    "ORDER BY timestamp DESC LIMIT 100"
+                    "SELECT ts, tool, input_summary FROM claude_sessions "
+                    "ORDER BY ts DESC LIMIT 100"
                 )
                 rows = cur.fetchall()
-                lines.append(f"Recent Claude prompts ({len(rows)}):")
-                for ts, prompt in rows:
-                    lines.append(f"  [{ts}] {prompt[:200]}")
+                lines.append(f"Recent Claude sessions ({len(rows)}):")
+                for r in rows:
+                    lines.append(f"  [{r['ts']}] [{r['tool']}] {(r['input_summary'] or '')[:200]}")
+
+                # Also include scored prompts table
+                cur.execute(
+                    "SELECT ts, text, score FROM prompts ORDER BY ts DESC LIMIT 50"
+                )
+                rows = cur.fetchall()
+                lines.append(f"\nStored prompts ({len(rows)}):")
+                for r in rows:
+                    lines.append(f"  [{r['ts']}] score={r['score']} {r['text'][:200]}")
 
             elif analysis_type == "learning":
                 cur.execute(
-                    "SELECT created_at, content FROM notes ORDER BY created_at DESC LIMIT 50"
+                    "SELECT ts, text, type FROM learnings ORDER BY ts DESC LIMIT 50"
                 )
                 notes = cur.fetchall()
-                lines.append(f"Notes ({len(notes)}):")
-                for ts, content in notes:
-                    lines.append(f"  [{ts}] {content[:300]}")
+                lines.append(f"Learnings ({len(notes)}):")
+                for r in notes:
+                    lines.append(f"  [{r['ts']}] [{r['type']}] {r['text'][:300]}")
 
                 cur.execute(
-                    "SELECT timestamp, summary FROM events WHERE event_type = 'error' "
-                    "ORDER BY timestamp DESC LIMIT 50"
+                    "SELECT last_seen, error_text, count FROM errors "
+                    "ORDER BY last_seen DESC LIMIT 50"
                 )
                 errors = cur.fetchall()
                 lines.append(f"\nRecent errors ({len(errors)}):")
-                for ts, summary in errors:
-                    lines.append(f"  [{ts}] {summary[:200]}")
+                for r in errors:
+                    lines.append(f"  [{r['last_seen']}] (x{r['count']}) {r['error_text'][:200]}")
 
     except Exception as exc:  # noqa: BLE001
         lines.append(f"[warning: could not read database — {exc}]")

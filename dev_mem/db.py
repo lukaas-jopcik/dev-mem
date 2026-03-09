@@ -13,7 +13,7 @@ import json
 import os
 import sqlite3
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -406,6 +406,94 @@ class Database:
             applied.append(description)
 
         return applied
+
+    # ------------------------------------------------------------------
+    # Alias / convenience methods called by cli.py
+    # ------------------------------------------------------------------
+
+    def today_stats(self, project_id: Optional[int] = None) -> dict[str, Any]:
+        """Alias for get_today_stats — returns today's activity counts."""
+        return self.get_today_stats(project_id)
+
+    def daily_summary(self, project_id: Optional[int] = None, date: Optional[str] = None) -> Optional[dict]:
+        """Get a stored daily summary for a project and date."""
+        if date is None:
+            date = datetime.now().strftime("%Y-%m-%d")
+        pid = project_id or self._default_project_id()
+        row = self._conn.execute(
+            "SELECT * FROM daily_summaries WHERE project_id=? AND date=? ORDER BY generated_at DESC LIMIT 1",
+            (pid, date)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def save_note(self, text: str, project_id: Optional[int] = None,
+                  note_type: str = "insight", project: Optional[str] = None) -> int:
+        """Save a manual learning note. Alias for insert_learning."""
+        pid = project_id or self._default_project_id()
+        return self.insert_learning(pid, text, note_type, "manual")
+
+    def save_decision(self, title: str, context: str = "", reasoning: str = "",
+                      alternatives: str = "", project_id: Optional[int] = None,
+                      decision: str = "", project: Optional[str] = None) -> int:
+        """Save an architectural decision."""
+        pid = project_id or self._default_project_id()
+        return self.insert_decision(pid, title, context, reasoning or decision, alternatives)
+
+    def export(self, fmt: str = "json", project_id: Optional[int] = None,
+               date_start: Optional[str] = None, date_end: Optional[str] = None) -> list:
+        """Export data as list of dicts. fmt is 'json' or 'csv' (same data, caller serializes)."""
+        pid = project_id or self._default_project_id()
+        rows = self._conn.execute(
+            "SELECT * FROM commands WHERE project_id=? ORDER BY ts DESC LIMIT 1000", (pid,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def migrate(self) -> None:
+        """Run pending migrations. Alias for run_migrations."""
+        import pathlib
+        migrations_dir = pathlib.Path(__file__).parent.parent / "migrations"
+        self.run_migrations(str(migrations_dir))
+
+    def archive(self, older_than_days: int = 90) -> dict:
+        """Archive old data per retention policy. Returns counts of archived rows."""
+        cutoff = int((datetime.now() - timedelta(days=older_than_days)).timestamp())
+        archived = {}
+        for table, ts_col in [("commands", "ts"), ("file_events", "ts"), ("claude_sessions", "ts")]:
+            result = self._conn.execute(f"DELETE FROM {table} WHERE {ts_col} < ?", (cutoff,))
+            archived[table] = result.rowcount
+        self._conn.commit()
+        return archived
+
+    def record_event(self, event_type: str, payload: Any = None,
+                     project_id: Optional[int] = None, project: Optional[str] = None) -> None:
+        """Generic event recording — routes to correct table based on event_type."""
+        pid = project_id or self._default_project_id()
+        if isinstance(payload, str):
+            payload = {"cmd": payload}
+        p = payload or {}
+        if event_type == "command":
+            cmd = p.get("cmd", "")
+            self.insert_command(pid, cmd, 0, 0)
+        elif event_type == "git":
+            self.insert_git_event(pid, p.get("hash", ""), p.get("message", ""), [], 0, 0)
+        elif event_type == "git-commit":
+            self.insert_git_event(pid, p.get("hash", ""), p.get("message", ""), [], 0, 0)
+
+    def _default_project_id(self) -> int:
+        """Return the first active project ID, or 1 as fallback."""
+        row = self._conn.execute(
+            "SELECT id FROM projects WHERE active=1 ORDER BY id LIMIT 1"
+        ).fetchone()
+        return row[0] if row else 1
+
+    # ------------------------------------------------------------------
+    # Connection accessor (for web app)
+    # ------------------------------------------------------------------
+
+    @property
+    def conn(self) -> sqlite3.Connection:
+        """Expose the underlying connection (used by cli_helpers and web app)."""
+        return self._conn
 
     # ------------------------------------------------------------------
     # Lifecycle

@@ -150,6 +150,39 @@ class Settings:
         """Resolved path to the SQLite database file."""
         return DB_PATH
 
+    @property
+    def active_project(self) -> str | None:
+        return self._data.get("active_project")
+
+    @property
+    def projects(self) -> list:
+        return self._data.get("projects", [])
+
+    @property
+    def context_dir(self) -> Path:
+        return DATA_DIR / "context"
+
+    @property
+    def daily_dir(self) -> Path:
+        return DATA_DIR / "daily"
+
+    @property
+    def archive_after_days(self) -> int:
+        return int(self._data.get("archive_after_days", 90))
+
+    def set_active_project(self, name: str) -> None:
+        self._data["active_project"] = name
+        self.save()
+
+    def add_project(self, path: str, name: str | None = None, color: str = "#6366f1") -> dict:
+        projects = self._data.get("projects", [])
+        proj_name = name or Path(path).name
+        entry = {"name": proj_name, "path": str(Path(path).expanduser()), "color": color}
+        projects.append(entry)
+        self._data["projects"] = projects
+        self.save()
+        return entry
+
     def as_dict(self) -> dict[str, Any]:
         """Return a shallow copy of the merged settings dict."""
         return dict(self._data)

@@ -29,6 +29,15 @@ from dev_mem.settings import Settings, DB_PATH
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
+
+def create_app(db_path: str | None = None, port: int = 8888) -> Flask:
+    """Application factory for dev-mem web dashboard."""
+    if db_path:
+        app.config["DB_PATH"] = db_path
+    app.config["PORT"] = port
+    return app
+
+
 _settings = Settings()
 _db = Database(DB_PATH)
 

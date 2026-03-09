@@ -19,9 +19,9 @@ def _db():
     return Database
 
 
-def _settings():
+def _settings() -> "Settings":
     from dev_mem.settings import Settings  # noqa: PLC0415
-    return Settings
+    return Settings()
 
 
 # ---------------------------------------------------------------------------
@@ -54,7 +54,7 @@ def install() -> None:
         console.print(f"  [cyan]...[/cyan] {step}")
 
     try:
-        settings = _settings().load()
+        settings = _settings()
         db = _db()(settings.db_path)
         db.migrate()
 
@@ -80,7 +80,7 @@ def init() -> None:
         sys.exit(1)
 
     try:
-        settings = _settings().load()
+        settings = _settings()
         from dev_mem.install import init_project  # noqa: PLC0415
         init_project(cwd, settings)
         console.print(f"[green]Initialized dev-mem in[/green] {cwd}")
@@ -106,7 +106,7 @@ def init() -> None:
 def status() -> None:
     """Show today's activity summary."""
     try:
-        settings = _settings().load()
+        settings = _settings()
         db = _db()(settings.db_path)
         stats = db.today_stats()
     except Exception as exc:  # noqa: BLE001
@@ -127,7 +127,7 @@ def status() -> None:
         table.add_row(label, str(value))
 
     console.print(table)
-    active = stats.get("active_project") or settings.active_project if "settings" in dir() else "unknown"
+    active = stats.get("active_project") or settings.active_project if "settings" in locals() else "unknown"
     console.print(f"\nActive project: [bold]{active or 'none'}[/bold]")
 
 
@@ -139,7 +139,7 @@ def status() -> None:
 def daily() -> None:
     """Print a formatted summary of today's work."""
     try:
-        settings = _settings().load()
+        settings = _settings()
         db = _db()(settings.db_path)
         summary = db.daily_summary()
         console.print(Panel(summary, title="Daily Summary", expand=False))
@@ -156,7 +156,7 @@ def daily() -> None:
 def note(text: str) -> None:
     """Save a manual learning note tied to the active project."""
     try:
-        settings = _settings().load()
+        settings = _settings()
         db = _db()(settings.db_path)
         note_id = db.save_note(text, project=settings.active_project)
         console.print(f"[green]Note saved[/green] (id={note_id}): {text[:80]}")
@@ -176,7 +176,7 @@ def note(text: str) -> None:
 def decide(title: str, context: str, decision: str) -> None:
     """Log an architectural decision record (ADR)."""
     try:
-        settings = _settings().load()
+        settings = _settings()
         db = _db()(settings.db_path)
         adr_id = db.save_decision(title=title, context=context, decision=decision,
                                   project=settings.active_project)
@@ -199,7 +199,7 @@ def project() -> None:
 def project_list() -> None:
     """List all registered projects."""
     try:
-        settings = _settings().load()
+        settings = _settings()
         projects = settings.projects
     except Exception as exc:  # noqa: BLE001
         console.print(f"[red]Could not load settings:[/red] {exc}")
@@ -228,7 +228,7 @@ def project_list() -> None:
 def switch(name: str) -> None:
     """Override the active project by name."""
     try:
-        settings = _settings().load()
+        settings = _settings()
         settings.set_active_project(name)
         settings.save()
         console.print(f"Active project set to [bold]{name}[/bold].")
@@ -243,7 +243,7 @@ def add(path: str) -> None:
     """Register a directory as a tracked project."""
     project_path = Path(path).resolve()
     try:
-        settings = _settings().load()
+        settings = _settings()
         settings.add_project(str(project_path))
         settings.save()
         console.print(f"[green]Project added:[/green] {project_path}")
@@ -286,7 +286,7 @@ def _run_analysis(analysis_type: str) -> None:
     from dev_mem.cli_helpers import build_context, launch_analysis  # noqa: PLC0415
 
     try:
-        settings = _settings().load()
+        settings = _settings()
     except Exception as exc:  # noqa: BLE001
         console.print(f"[red]Could not load settings:[/red] {exc}")
         sys.exit(1)
@@ -344,7 +344,7 @@ def learning() -> None:
 def save() -> None:
     """Save the last generated analysis context file to the daily directory."""
     try:
-        settings = _settings().load()
+        settings = _settings()
         context_dir = Path(settings.context_dir)
         daily_dir = Path(settings.daily_dir)
         daily_dir.mkdir(parents=True, exist_ok=True)
@@ -380,7 +380,7 @@ def save() -> None:
 def export(fmt: str, output: Optional[str]) -> None:
     """Export collected data to JSON, Markdown, or CSV."""
     try:
-        settings = _settings().load()
+        settings = _settings()
         db = _db()(settings.db_path)
         data = db.export(fmt)
     except Exception as exc:  # noqa: BLE001
@@ -402,7 +402,7 @@ def export(fmt: str, output: Optional[str]) -> None:
 def upgrade() -> None:
     """Run database migrations after updating dev-mem."""
     try:
-        settings = _settings().load()
+        settings = _settings()
         db = _db()(settings.db_path)
         version = db.migrate()
         console.print(f"[green]Database migrated.[/green] Schema version: {version}")
@@ -421,7 +421,7 @@ def doctor() -> None:
     from dev_mem.cli_helpers import run_doctor  # noqa: PLC0415
 
     try:
-        settings = _settings().load()
+        settings = _settings()
         db_path = Path(settings.db_path)
         projects = [p.get("path", "") for p in (settings.projects or [])]
     except Exception:  # noqa: BLE001
@@ -440,7 +440,7 @@ def doctor() -> None:
 def rollback_hooks() -> None:
     """Emergency removal of all installed shell and git hooks."""
     try:
-        settings = _settings().load()
+        settings = _settings()
         from dev_mem.install import rollback  # noqa: PLC0415
         rollback(settings)
         console.print("[green]All dev-mem hooks removed.[/green]")
@@ -465,7 +465,7 @@ def rollback_hooks() -> None:
 def archive(days: Optional[int]) -> None:
     """Manually trigger data archiving for old entries."""
     try:
-        settings = _settings().load()
+        settings = _settings()
         threshold = days or settings.archive_after_days or 90
         db = _db()(settings.db_path)
         count = db.archive(older_than_days=threshold)
@@ -485,7 +485,7 @@ def archive(days: Optional[int]) -> None:
 def _collect(event_type: str, payload: str) -> None:
     """Internal: record an event from a shell or git hook (not for end users)."""
     try:
-        settings = _settings().load()
+        settings = _settings()
         db = _db()(settings.db_path)
         db.record_event(event_type=event_type, payload=payload,
                         project=settings.active_project)
