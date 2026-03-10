@@ -49,6 +49,7 @@ def _run() -> None:
         build_session_summary,
         extract_learnings,
     )
+    from dev_mem.memory.context_injector import write_project_memory_md
 
     settings = Settings()
     db_path = settings.db_path
@@ -69,6 +70,14 @@ def _run() -> None:
         complete_session(conn, memory_session_id)
         build_session_summary(conn, memory_session_id, project_id)
         n_learnings = extract_learnings(conn, memory_session_id, project_id)
+
+        # Write to Claude Code's persistent memory dir so context survives resets
+        cwd = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+        project_name = session_row["project"] if session_row and "project" in session_row.keys() else ""
+        if not project_name:
+            from pathlib import Path as _Path
+            project_name = _Path(cwd).name
+        write_project_memory_md(conn, project_name, project_id, cwd)
 
         # Write a brief status to stderr (visible in Claude Code logs)
         if n_learnings > 0:

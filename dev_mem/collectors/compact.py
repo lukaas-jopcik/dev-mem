@@ -16,6 +16,7 @@ import signal
 import sqlite3
 import sys
 import threading
+from pathlib import Path
 
 
 _TIMEOUT_SECONDS = 5.0
@@ -44,6 +45,7 @@ def _run() -> None:
 
     from dev_mem.settings import Settings
     from dev_mem.memory.session_tracker import build_session_summary, extract_learnings
+    from dev_mem.memory.context_injector import write_project_memory_md
 
     settings = Settings()
     db_path = settings.db_path
@@ -89,6 +91,11 @@ def _run() -> None:
                 # Rebuild to capture new observations
                 build_session_summary(conn, memory_session_id, project_id)
                 extract_learnings(conn, memory_session_id, project_id)
+
+        # Write to Claude Code's persistent memory dir so context survives resets
+        cwd = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+        project_name = (session_row["project"] if session_row else "") or Path(cwd).name
+        write_project_memory_md(conn, project_name, project_id, cwd)
 
         print("[dev-mem] compact: session state saved", file=sys.stderr)
 

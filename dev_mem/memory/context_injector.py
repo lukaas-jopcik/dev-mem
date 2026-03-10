@@ -249,6 +249,113 @@ def write_context_to_stdout() -> None:
                 pass
 
 
+def write_project_memory_md(
+    conn: sqlite3.Connection,
+    project: str,
+    project_id: Optional[int],
+    cwd: str,
+) -> None:
+    """
+    Write a compact markdown summary to Claude Code's auto-memory directory.
+
+    Claude Code reads ~/.claude/projects/<hash>/memory/MEMORY.md at every
+    session start AND after context window resets — so this survives PreCompact
+    unlike the SessionStart stdout injection which fires only once.
+
+    Path hash: cwd.replace("/", "-")  e.g. /Users/x/proj → -Users-x-proj
+    """
+    try:
+        parts: list[str] = []
+        now_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        parts.append(f"# dev-mem — {project}\n_Last updated: {now_date}_\n")
+
+        # ── Recent sessions ──────────────────────────────────────────────
+        summaries = []
+        if project_id is not None:
+            summaries = conn.execute(
+                "SELECT * FROM session_summaries WHERE project_id = ? "
+                "ORDER BY created_at DESC LIMIT 4",
+                (project_id,),
+            ).fetchall()
+        if not summaries:
+            summaries = conn.execute(
+                "SELECT * FROM session_summaries "
+                "WHERE (completed != '' OR learned != '') "
+                "ORDER BY created_at DESC LIMIT 4"
+            ).fetchall()
+
+        if summaries:
+            parts.append("## Recent sessions")
+            for s in summaries:
+                date = (s["created_at"] or "")[:10]
+                line = f"- **{date}**:"
+                if s["completed"] and _is_meaningful(s["completed"]):
+                    line += f" {s['completed'][:120]}"
+                if s["learned"] and _is_meaningful(s["learned"]) and not s["learned"].startswith("{"):
+                    learned_short = s["learned"].split("\n")[0][:100]
+                    line += f"\n  - _{learned_short}_"
+                parts.append(line)
+            parts.append("")
+
+        # ── Key learnings ────────────────────────────────────────────────
+        learnings = []
+        if project_id is not None:
+            learnings = conn.execute(
+                "SELECT type, text FROM learnings WHERE project_id = ? "
+                "ORDER BY ts DESC LIMIT 10",
+                (project_id,),
+            ).fetchall()
+        if not learnings:
+            learnings = conn.execute(
+                "SELECT type, text FROM learnings ORDER BY ts DESC LIMIT 10"
+            ).fetchall()
+
+        if learnings:
+            parts.append("## Key learnings")
+            for l in learnings:
+                ltype = l["type"] or "note"
+                text = (l["text"] or "")[:150]
+                if text:
+                    parts.append(f"- **{ltype}**: {text}")
+            parts.append("")
+
+        # ── Recent decisions ─────────────────────────────────────────────
+        try:
+            dec_where = "WHERE 1=1"
+            dec_params: list = []
+            if project_id is not None:
+                dec_where += " AND project_id = ?"
+                dec_params.append(project_id)
+            decisions = conn.execute(
+                f"SELECT title FROM decisions {dec_where} ORDER BY ts DESC LIMIT 4",
+                dec_params,
+            ).fetchall()
+            if decisions:
+                parts.append("## Recent decisions")
+                for d in decisions:
+                    title = (d["title"] or "")[:120]
+                    if title:
+                        parts.append(f"- {title}")
+                parts.append("")
+        except Exception:
+            pass
+
+        if len(parts) <= 1:
+            return  # Nothing meaningful to write
+
+        content = "\n".join(parts)
+
+        # Write to ~/.claude/projects/<hash>/memory/MEMORY.md
+        path_hash = cwd.replace("/", "-")
+        memory_dir = Path.home() / ".claude" / "projects" / path_hash / "memory"
+        memory_dir.mkdir(parents=True, exist_ok=True)
+        memory_file = memory_dir / "MEMORY.md"
+        memory_file.write_text(content, encoding="utf-8")
+
+    except Exception:
+        pass
+
+
 def _save_injection_size(block: str, cwd: str) -> None:
     """
     Store context_injected_chars on the current session row.
