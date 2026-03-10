@@ -107,6 +107,7 @@ def install_claude() -> None:
         entries.append({"matcher": ".*", "hooks": [{"type": "command", "command": command}]})
 
     _ensure_hook("SessionStart", "dev-mem collect session-start")
+    _ensure_hook("UserPromptSubmit", "dev-mem collect user-prompt")
     _ensure_hook("Stop", "dev-mem collect session-stop")
     _ensure_hook("PreCompact", "dev-mem collect compact")
     _ensure_posttooluse_hook("dev-mem collect claude-tool")
@@ -746,6 +747,13 @@ def collect_git() -> None:
 def collect_session_start() -> None:
     """SessionStart hook — injects memory context into Claude session."""
     from dev_mem.collectors.session_start import main as _run  # noqa: PLC0415
+    _run()
+
+
+@collect.command("user-prompt")
+def collect_user_prompt() -> None:
+    """UserPromptSubmit hook — injects mini context on every message + compact signal."""
+    from dev_mem.collectors.user_prompt import main as _run  # noqa: PLC0415
     _run()
 
 
