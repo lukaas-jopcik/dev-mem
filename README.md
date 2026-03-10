@@ -125,24 +125,27 @@ dev-mem install-claude
 ```
 Claude Code session
 │
-├── SessionStart ──► context_injector.py
-│                    reads DB → builds compact XML → injects into system prompt
-│                    records injection size for token savings tracking
+├── SessionStart      ──► context_injector.py
+│                          reads DB → builds compact XML → injects into system prompt
+│                          writes MEMORY.md to ~/.claude/projects/<hash>/memory/
 │
-├── PostToolUse  ──► claude_code.py              (fires on every tool call)
-│                    records observation: Read/Write/Edit/Bash
-│                    tracks Agent + Skill invocations separately
-│                    detects errors → upserts error table
+├── UserPromptSubmit  ──► user_prompt.py          (fires before every message)
+│                          injects 1-line context reminder — survives context resets
+│                          if transcript > 180KB: warns Claude to /compact soon
 │
-├── PreCompact   ──► compact.py                  (before context window reset)
-│                    saves session summary
-│                    extracts learnings so far
-│                    next session starts with full continuity
+├── PostToolUse       ──► claude_code.py          (fires on every tool call)
+│                          records observation: Read/Write/Edit/Bash
+│                          tracks Agent + Skill invocations separately
+│                          detects errors → upserts error table
 │
-└── Stop         ──► session_stop.py             (session ends)
-                     builds final summary (what was edited, what was fixed)
-                     extracts learnings: bugfix→mistake, decision→insight, refactor→tip
-                     marks session complete
+├── PreCompact        ──► compact.py              (before context window reset)
+│                          saves session summary + extracts learnings
+│                          writes updated MEMORY.md so context survives reset
+│
+└── Stop              ──► session_stop.py         (session ends)
+                           builds final summary (what was edited, what was fixed)
+                           extracts learnings: bugfix→mistake, decision→insight, refactor→tip
+                           writes final MEMORY.md
 ```
 
 **Database:** `~/.dev-mem/mem.db` — SQLite WAL. 21 tables. Nothing leaves your machine.
@@ -156,10 +159,11 @@ Claude Code session
 ```json
 {
   "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "dev-mem collect session-start" }]}],
-    "Stop":         [{ "hooks": [{ "type": "command", "command": "dev-mem collect session-stop"  }]}],
-    "PreCompact":   [{ "hooks": [{ "type": "command", "command": "dev-mem collect compact"        }]}],
-    "PostToolUse":  [{ "matcher": ".*", "hooks": [{ "type": "command", "command": "dev-mem collect claude-tool" }]}]
+    "SessionStart":      [{ "hooks": [{ "type": "command", "command": "dev-mem collect session-start" }]}],
+    "UserPromptSubmit":  [{ "hooks": [{ "type": "command", "command": "dev-mem collect user-prompt"   }]}],
+    "Stop":              [{ "hooks": [{ "type": "command", "command": "dev-mem collect session-stop"  }]}],
+    "PreCompact":        [{ "hooks": [{ "type": "command", "command": "dev-mem collect compact"       }]}],
+    "PostToolUse":       [{ "matcher": ".*", "hooks": [{ "type": "command", "command": "dev-mem collect claude-tool" }]}]
   },
   "mcpServers": {
     "dev-mem": { "type": "stdio", "command": "dev-mem", "args": ["mcp-server"] }
